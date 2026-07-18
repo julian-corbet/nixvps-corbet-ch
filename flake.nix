@@ -12,11 +12,13 @@
     in
     {
       # Extraction in progress: this repo is being pulled out of a private
-      # fleet configuration. The pull-based self-update module is the first
-      # real module to land; the remaining roadmap items in README.md are
-      # still being extracted and generalized.
+      # fleet configuration. The pull-based self-update module was the
+      # first real module to land; the tiny-vm baseline profile is the
+      # second. The remaining roadmap items in README.md are still being
+      # extracted and generalized.
       nixosModules = {
         pull-update = ./modules/pull-update.nix;
+        tiny-vm = ./modules/tiny-vm.nix;
       };
 
       lib = { };

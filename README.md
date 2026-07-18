@@ -41,15 +41,17 @@ layer.
 
 ## Status
 
-**Pre-alpha.** The first real module has landed: `nixosModules.pull-update`
+**Pre-alpha.** Two real modules have landed: `nixosModules.pull-update`
 (`modules/pull-update.nix`), a reboot-less pull-based self-update mechanism
-with signature-checked substitution and local health-check rollback. It is
-being extracted from a private fleet configuration where it was developed
-and used for real, generalized so it carries no site-specific defaults —
-but it is still new, lightly documented, and not yet used outside that
-original extraction. Everything else in this repo remains a placeholder;
-if you found this searching for a drop-in NixOS distribution, most of it is
-not ready for that yet.
+with signature-checked substitution and local health-check rollback; and
+`nixosModules.tiny-vm` (`modules/tiny-vm.nix`), a conservative baseline
+profile (btrfs mount tuning, bounded journald, a clamped nix-daemon) for
+small/slow/low-RAM cloud VMs. Both are being extracted from a private fleet
+configuration where they were developed and used for real, generalized so
+they carry no site-specific defaults — but they are still new, lightly
+documented, and not yet used outside that original extraction. Everything
+else in this repo remains a placeholder; if you found this searching for a
+drop-in NixOS distribution, most of it is not ready for that yet.
 
 ### Using `pull-update`
 
@@ -76,12 +78,33 @@ not ready for that yet.
 }
 ```
 
+### Using `tiny-vm`
+
+```nix
+{
+  inputs.nixvps.url = "github:<you>/nixvps";
+
+  outputs = { self, nixpkgs, nixvps }: {
+    nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
+      modules = [
+        nixvps.nixosModules.tiny-vm
+        {
+          nixvps.tinyVm.enable = true;
+          # every default below can be overridden; see modules/tiny-vm.nix
+          # nixvps.tinyVm.nixMaxJobs = 2;
+        }
+      ];
+    };
+  };
+}
+```
+
 ## Roadmap
 
 Planned, not yet built:
 
-- [ ] RAM-class base profile (conservative daemon defaults, clamped
-      `nix.settings` for `nix-daemon`)
+- [x] RAM-class base profile (conservative daemon defaults, clamped
+      `nix.settings` for `nix-daemon`) — `modules/tiny-vm.nix`
 - [ ] Disk-image baking module (`systemd-repart` / `disko` patterns for
       boot-from-image instead of install-on-first-boot)
 - [x] Pull-based self-update module (signed closure pointer, fetch,
