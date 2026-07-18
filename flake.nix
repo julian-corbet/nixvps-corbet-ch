@@ -19,6 +19,7 @@
       nixosModules = {
         pull-update = ./modules/pull-update.nix;
         tiny-vm = ./modules/tiny-vm.nix;
+        deploy-target = ./modules/deploy-target.nix;
       };
 
       lib = { };
