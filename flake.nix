@@ -12,12 +12,12 @@
     in
     {
       # Extraction in progress: this repo is being pulled out of a private
-      # fleet configuration. No NixOS modules or profiles have landed yet.
-      # `nixosModules` / `lib` will gain real content as the roadmap items
-      # in README.md are extracted and generalized. Kept as a real (empty)
-      # attribute set rather than omitted, so downstream flakes can already
-      # depend on this output shape without breaking later.
-      nixosModules = { };
+      # fleet configuration. The pull-based self-update module is the first
+      # real module to land; the remaining roadmap items in README.md are
+      # still being extracted and generalized.
+      nixosModules = {
+        pull-update = ./modules/pull-update.nix;
+      };
 
       lib = { };
 

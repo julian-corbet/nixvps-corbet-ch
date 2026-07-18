@@ -41,14 +41,40 @@ layer.
 
 ## Status
 
-**Pre-alpha.** This repository is a scaffold, not a usable project yet.
-It is being extracted from a private fleet configuration where these
-patterns were developed and used for real, but nothing here has been
-generalized, documented, or tested outside that original context. There
-is no working module, no example configuration, and no released version.
-Treat everything in this repo as a placeholder for work in progress —
-if you found this searching for a drop-in NixOS module, it is not ready
-for that yet.
+**Pre-alpha.** The first real module has landed: `nixosModules.pull-update`
+(`modules/pull-update.nix`), a reboot-less pull-based self-update mechanism
+with signature-checked substitution and local health-check rollback. It is
+being extracted from a private fleet configuration where it was developed
+and used for real, generalized so it carries no site-specific defaults —
+but it is still new, lightly documented, and not yet used outside that
+original extraction. Everything else in this repo remains a placeholder;
+if you found this searching for a drop-in NixOS distribution, most of it is
+not ready for that yet.
+
+### Using `pull-update`
+
+```nix
+{
+  inputs.nixvps.url = "github:<you>/nixvps";
+
+  outputs = { self, nixpkgs, nixvps }: {
+    nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
+      modules = [
+        nixvps.nixosModules.pull-update
+        {
+          nixvps.pullUpdate = {
+            enable = true;
+            cache = "https://cache.example.com";     # your signed binary cache
+            domain = "example.com";                    # zone for the _deploy.<host> TXT pointer
+            healthUnits = [ "sshd" "my-app" ];          # units that must stay active
+            # healthUrl = "https://example.com/health"; # optional HTTP health check
+          };
+        }
+      ];
+    };
+  };
+}
+```
 
 ## Roadmap
 
@@ -58,8 +84,8 @@ Planned, not yet built:
       `nix.settings` for `nix-daemon`)
 - [ ] Disk-image baking module (`systemd-repart` / `disko` patterns for
       boot-from-image instead of install-on-first-boot)
-- [ ] Pull-based self-update module (signed closure pointer, fetch,
-      switch, local health-check rollback)
+- [x] Pull-based self-update module (signed closure pointer, fetch,
+      switch, local health-check rollback) — `modules/pull-update.nix`
 - [ ] An example minimal configuration wiring the above together
 - [ ] Documentation site content and a real quickstart
 
