@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>nixvps &mdash; NixOS profiles for tiny cloud VMs</title>
+  <meta name="description" content="Hardened, memory-disciplined NixOS profiles for the 1 GB-RAM class of cloud VMs. Pre-alpha - being extracted from a private fleet configuration.">
+
+  <meta name="theme-color" content="#0b1120" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+
+  <meta property="og:title" content="nixvps">
+  <meta property="og:description" content="Hardened, memory-disciplined NixOS profiles for the 1 GB-RAM class of cloud VMs. Pre-alpha scaffold.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://nixvps.corbet.ch">
+  <meta name="twitter:card" content="summary">
+
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="page.css">
+</head>
+<body>
+
+<header class="hero">
+  <nav>
+    <a href="/" class="nav-brand">nixvps</a>
+    <div class="nav-links">
+      <a href="https://github.com/julian-corbet/nixvps-corbet-ch">GitHub</a>
+      <a href="#status">Status</a>
+      <a href="#roadmap">Roadmap</a>
+    </div>
+  </nav>
+
+  <div class="hero-content">
+    <h1>nixvps</h1>
+    <p class="tagline">NixOS profiles for tiny cloud VMs</p>
+    <p class="subtitle">Hardened, memory-disciplined NixOS base profiles for
+    the 1 GB-RAM class of cloud instances &mdash; the walls almost everyone
+    running NixOS on a free-tier VPS hits eventually.</p>
+    <div class="cta">
+      <a href="#status" class="btn btn-primary">Read the honest status</a>
+      <a href="https://github.com/julian-corbet/nixvps-corbet-ch" class="btn btn-secondary">View on GitHub</a>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<section id="status" class="how-it-works">
+  <div class="container">
+    <h2>Status: pre-alpha</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">!</div>
+        <h3>Not usable yet</h3>
+        <p>This is a scaffold, not a working project. There is no
+        released module, no example configuration, and nothing here has
+        been tested outside its original context yet.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">!</div>
+        <h3>Being extracted</h3>
+        <p>These patterns were developed and used for real inside a
+        private fleet configuration. Pulling them out into a
+        general-purpose, documented project is in progress.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">!</div>
+        <h3>No fake claims</h3>
+        <p>Nothing on this page describes a feature that exists today.
+        Everything below the fold is the plan, clearly marked as such.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="features">
+  <div class="container">
+    <h2>Scope</h2>
+    <div class="feature-grid">
+      <div class="feature">
+        <h3>RAM-class system defaults</h3>
+        <p>Conservative service defaults and a clamped <code>nix-daemon</code>
+        (build parallelism, cores, memory ceilings) sized for boxes in the
+        ~1 GB class, so a routine rebuild doesn't compete the box's own
+        workload out of memory.</p>
+      </div>
+      <div class="feature">
+        <h3>Disk-image baking</h3>
+        <p>Patterns for building a prebuilt disk image
+        (<code>systemd-repart</code> / <code>disko</code>-style
+        partitioning) so a VM boots from a ready image instead of running
+        a full NixOS install step on first boot.</p>
+      </div>
+      <div class="feature">
+        <h3>Pull-based self-update</h3>
+        <p>For boxes a central deploy pipeline can't always reach: the
+        node fetches a signed pointer to the next closure, switches to
+        it, and rolls back to the last-known-good generation on a failed
+        local health check.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="features">
+  <div class="container">
+    <h2>Explicitly out of scope</h2>
+    <div class="feature-grid">
+      <div class="feature">
+        <h3>Deep zram / zswap / OOM tuning</h3>
+        <p>Memory-pressure engineering below the system-shape layer
+        belongs to the sibling <a href="https://github.com/julian-corbet/nixram-corbet-ch">nixram</a>
+        project. nixvps assumes something like it already handles that
+        layer.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="roadmap" class="commands">
+  <div class="container">
+    <h2>Roadmap (planned, not built)</h2>
+    <div class="table-scroll">
+      <table>
+        <tbody>
+          <tr><td>RAM-class base profile</td><td>Conservative daemon defaults, clamped <code>nix.settings</code> for <code>nix-daemon</code>.</td></tr>
+          <tr><td>Disk-image baking module</td><td><code>systemd-repart</code> / <code>disko</code> patterns, boot-from-image instead of install-on-first-boot.</td></tr>
+          <tr><td>Pull-based self-update module</td><td>Signed closure pointer, fetch, switch, local health-check rollback.</td></tr>
+          <tr><td>Example configuration</td><td>A minimal config wiring the above profiles together end to end.</td></tr>
+          <tr><td>Documentation site content</td><td>A real quickstart, once there is something to start with.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="https://github.com/julian-corbet/nixvps-corbet-ch">Source</a>
+      <a href="https://github.com/julian-corbet/nixvps-corbet-ch/issues">Issues</a>
+    </div>
+    <p>
+      <a href="https://github.com/julian-corbet/nixvps-corbet-ch/blob/main/LICENSE">MIT</a> &middot;
+      <a href="https://github.com/julian-corbet">Julian Corbet</a>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

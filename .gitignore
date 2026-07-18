@@ -1,0 +1,8 @@
+# Nix
+result
+result-*
+.direnv/
+
+# Editor / OS
+.DS_Store
+*.swp

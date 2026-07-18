@@ -1,0 +1,54 @@
+/* =====================================================================
+   nixvps / site / theme.css
+   Retints the project-pages base accent from dotkeeper's emerald to a
+   warm amber/orange, distinct from the other project-family pages.
+   Only tokens listed as "safe to override" in the vendored
+   project-pages theming contract are touched here — see
+   tokens.css / page.css for the structural base this loads between.
+
+   Contrast checked against WCAG AA (4.5:1) for both directions:
+     dark:  #f59e0b accent text on #0b1120 bg          -> ~8.8:1
+     dark:  #0b1120 accent-text on #f59e0b button bg   -> ~8.8:1
+     light: #b45309 accent text on #ffffff bg          -> ~5.0:1
+     light: #ffffff accent-text on #b45309 button bg   -> ~5.0:1
+   ===================================================================== */
+
+:root {
+  /* Dark mode (and default) accent - warm amber. */
+  --accent: #f59e0b;
+  --accent-hover: #fbbf24;
+  --accent-dim: rgba(245, 158, 11, 0.12);
+  --accent-glow: rgba(245, 158, 11, 0.08);
+  --accent-text: #0b1120;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    /* Deeper amber for light mode - keeps text-on-white contrast at
+       WCAG AA (#b45309 on #ffffff ~= 5.0:1). */
+    --accent: #b45309;
+    --accent-hover: #92400e;
+    --accent-dim: rgba(180, 83, 9, 0.08);
+    --accent-glow: rgba(180, 83, 9, 0.06);
+    --accent-text: #ffffff;
+  }
+}
+
+/* Mirror both variants for an explicit data-theme toggle, so the
+   override wins in both directions regardless of how the theme
+   was chosen. */
+:root[data-theme="dark"] {
+  --accent: #f59e0b;
+  --accent-hover: #fbbf24;
+  --accent-dim: rgba(245, 158, 11, 0.12);
+  --accent-glow: rgba(245, 158, 11, 0.08);
+  --accent-text: #0b1120;
+}
+
+:root[data-theme="light"] {
+  --accent: #b45309;
+  --accent-hover: #92400e;
+  --accent-dim: rgba(180, 83, 9, 0.08);
+  --accent-glow: rgba(180, 83, 9, 0.06);
+  --accent-text: #ffffff;
+}

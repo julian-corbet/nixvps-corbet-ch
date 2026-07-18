@@ -1,0 +1,190 @@
+/* =====================================================================
+   vendored from design-corbet-ch project-pages v0.1.0
+   project-pages / tokens.css
+   Design tokens for the reusable project-page base.
+   source-version: 0.1.0
+
+   These are the ONLY values a per-project theme is allowed to touch.
+   Everything else (layout, structure) lives in page.css and consumes
+   these custom properties only — never hardcodes color/spacing/type.
+
+   Defaults below are dotkeeper's page, verbatim: dotkeeper IS the
+   reference theme. New projects override a small token subset in
+   themes/<project>.css (see themes/README.md for the contract).
+   ===================================================================== */
+
+:root {
+  color-scheme: dark light;
+
+  /* ---- Color: surfaces ---- */
+  --bg: #0b1120;
+  --bg-alt: #111827;
+  --bg-card: #151f30;
+  --bg-inset: #0a0e1a;
+
+  /* ---- Color: text ---- */
+  --text: #e2e8f0;
+  --text-dim: #8892a6;
+  --text-bright: #f8fafc;
+
+  /* ---- Color: accent (the one hue a theme typically changes) ---- */
+  --accent: #34d399;
+  --accent-hover: #6ee7b7;
+  --accent-dim: rgba(52, 211, 153, 0.12);
+  --accent-glow: rgba(52, 211, 153, 0.08);
+  --accent-text: #0b1120;
+
+  /* ---- Color: terminal / code chrome ---- */
+  --terminal-bg: #0a0e14;
+  --terminal-chrome: #161f2e;
+  --terminal-fg: #d1d5db;
+  --terminal-fg-dim: #7c8494;
+
+  /* ---- Color: borders & dots ---- */
+  --border: #1e293b;
+  --dot-red: #ef4444;
+  --dot-yellow: #eab308;
+  --dot-green: #22c55e;
+
+  /* ---- Radii ---- */
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-sm: 6px;
+
+  /* ---- Layout ---- */
+  --max-width: 960px;
+
+  /* ---- Shadows ---- */
+  --shadow-terminal: 0 0 0 1px var(--border), 0 8px 40px rgba(0,0,0,0.3), 0 0 80px var(--accent-glow);
+  --card-shadow: none;
+
+  /* ---- Type scale ---- */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+  --font-size-base: 16px;
+  --line-height-base: 1.7;
+
+  --h1-size: 3.5rem;
+  --h1-size-mobile: 2.5rem;
+  --h1-size-mobile-sm: 2rem;
+  --h2-size: 1.75rem;
+  --h2-size-mobile: 1.5rem;
+  --h3-size: 1.05rem;
+  --tagline-size: 1.25rem;
+  --tagline-size-mobile: 1.1rem;
+  --subtitle-size: 1.05rem;
+  --subtitle-size-mobile: 0.95rem;
+  --body-size: 0.95rem;
+  --small-size: 0.85rem;
+
+  /* ---- Spacing scale ---- */
+  --space-1: 0.5rem;
+  --space-2: 0.75rem;
+  --space-3: 1rem;
+  --space-4: 1.25rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 2.5rem;
+  --space-8: 3rem;
+  --space-9: 5rem;
+
+  /* ---- theme-color meta hint (informational; set in <head> too) ---- */
+  --theme-color-dark: #0b1120;
+  --theme-color-light: #ffffff;
+}
+
+/* =====================================================================
+   Light mode — true white/near-white, NEVER cream/beige/off-white.
+   ===================================================================== */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #ffffff;
+    --bg-alt: #f3f4f6;
+    --bg-card: #ffffff;
+    --bg-inset: #edf0f3;
+
+    --text: #1a202c;
+    --text-dim: #5a6577;
+    --text-bright: #0f141a;
+
+    --accent: #047857;
+    --accent-hover: #065f46;
+    --accent-dim: rgba(4, 120, 87, 0.08);
+    --accent-glow: rgba(4, 120, 87, 0.06);
+    --accent-text: #ffffff;
+
+    --terminal-bg: #1a1e28;
+    --terminal-chrome: #252b37;
+    --terminal-fg: #d1d5db;
+    --terminal-fg-dim: #7c8494;
+
+    --border: #e2e8f0;
+
+    --shadow-terminal: 0 0 0 1px rgba(0,0,0,0.08), 0 8px 40px rgba(0,0,0,0.15);
+    --card-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
+  }
+}
+
+/* =====================================================================
+   Explicit theme override (a page-level toggle stamps data-theme on
+   the root element). This always wins over the OS media query, in
+   both directions.
+   ===================================================================== */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0b1120;
+  --bg-alt: #111827;
+  --bg-card: #151f30;
+  --bg-inset: #0a0e1a;
+
+  --text: #e2e8f0;
+  --text-dim: #8892a6;
+  --text-bright: #f8fafc;
+
+  --accent: #34d399;
+  --accent-hover: #6ee7b7;
+  --accent-dim: rgba(52, 211, 153, 0.12);
+  --accent-glow: rgba(52, 211, 153, 0.08);
+  --accent-text: #0b1120;
+
+  --terminal-bg: #0a0e14;
+  --terminal-chrome: #161f2e;
+  --terminal-fg: #d1d5db;
+  --terminal-fg-dim: #7c8494;
+
+  --border: #1e293b;
+
+  --shadow-terminal: 0 0 0 1px var(--border), 0 8px 40px rgba(0,0,0,0.3), 0 0 80px var(--accent-glow);
+  --card-shadow: none;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #ffffff;
+  --bg-alt: #f3f4f6;
+  --bg-card: #ffffff;
+  --bg-inset: #edf0f3;
+
+  --text: #1a202c;
+  --text-dim: #5a6577;
+  --text-bright: #0f141a;
+
+  --accent: #047857;
+  --accent-hover: #065f46;
+  --accent-dim: rgba(4, 120, 87, 0.08);
+  --accent-glow: rgba(4, 120, 87, 0.06);
+  --accent-text: #ffffff;
+
+  --terminal-bg: #1a1e28;
+  --terminal-chrome: #252b37;
+  --terminal-fg: #d1d5db;
+  --terminal-fg-dim: #7c8494;
+
+  --border: #e2e8f0;
+
+  --shadow-terminal: 0 0 0 1px rgba(0,0,0,0.08), 0 8px 40px rgba(0,0,0,0.15);
+  --card-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
+}
