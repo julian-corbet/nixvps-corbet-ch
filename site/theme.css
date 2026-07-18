@@ -1,17 +1,13 @@
-/* =====================================================================
-   nixvps / site / theme.css
-   Retints the project-pages base accent from dotkeeper's emerald to a
-   warm amber/orange, distinct from the other project-family pages.
-   Only tokens listed as "safe to override" in the vendored
-   project-pages theming contract are touched here — see
-   tokens.css / page.css for the structural base this loads between.
+/* nixvps theme — overrides only accent/font/radius of the foss v1 base.
+   Retints the central design system base accent to a warm amber/orange,
+   distinct from the other project-family pages.
 
    Contrast checked against WCAG AA (4.5:1) for both directions:
      dark:  #f59e0b accent text on #0b1120 bg          -> ~8.8:1
      dark:  #0b1120 accent-text on #f59e0b button bg   -> ~8.8:1
      light: #b45309 accent text on #ffffff bg          -> ~5.0:1
      light: #ffffff accent-text on #b45309 button bg   -> ~5.0:1
-   ===================================================================== */
+*/
 
 :root {
   /* Dark mode (and default) accent - warm amber. */
