@@ -21,6 +21,13 @@
         tiny-vm = ./modules/tiny-vm.nix;
         deploy-target = ./modules/deploy-target.nix;
         nano = ./modules/nano.nix;
+        # Generic systemd-repart cloud image bake (ESP + systemd-boot + btrfs
+        # root, parameterized). See modules/image-bake.nix for the honest
+        # scope note: this is a starting point, not a turnkey per-provider
+        # image. Enable via `nixvps.imageBake.enable = true;`, then build the
+        # image itself with:
+        #   nix build .#nixosConfigurations.<name>.config.system.build.image
+        image-bake = ./modules/image-bake.nix;
       };
 
       lib = { };
