@@ -63,7 +63,18 @@ not yet used outside that original extraction. Everything else in this
 repo remains a placeholder; if you found this searching for a drop-in
 NixOS distribution, most of it is not ready for that yet.
 
-### Using `tiny-vm`
+## Usage
+
+A tiny VM usually has limited RAM (1 GB) and constrained build capacity
+(1 vCPU). The three modules work independently or together.
+
+### tiny-vm: Conservative baseline
+
+A RAM-constrained box needs careful defaults: the btrfs root tuned for
+small disks, journald capped to avoid filling a tiny partition, and the
+nix daemon set to build serially (1 job, 1 core per job) so the builder
+doesn't OOM the workload. Every setting uses `lib.mkDefault`, so you can
+override anything without fighting the module.
 
 ```nix
 {
@@ -75,8 +86,14 @@ NixOS distribution, most of it is not ready for that yet.
         nixvps.nixosModules.tiny-vm
         {
           nixvps.tinyVm.enable = true;
-          # every default below can be overridden; see modules/tiny-vm.nix
-          # nixvps.tinyVm.nixMaxJobs = 2;
+
+          # All of these are optional; shown here are the defaults:
+          # nixvps.tinyVm.rootMountOptions = [ "compress=zstd" "noatime" "space_cache=v2" ];
+          # nixvps.tinyVm.journalMaxUse = "200M";      # persistent journal size cap
+          # nixvps.tinyVm.journalRuntimeMaxUse = "50M"; # in-memory journal size cap
+          # nixvps.tinyVm.nixMaxJobs = 1;               # parallel derivations to build
+          # nixvps.tinyVm.nixCores = 1;                 # cores per derivation
+          # nixvps.tinyVm.gcOlderThan = "30d";          # automatic gc age threshold
         }
       ];
     };
@@ -84,7 +101,19 @@ NixOS distribution, most of it is not ready for that yet.
 }
 ```
 
-### Using `pull-update`
+### pull-update: Autonomous reboot-less self-update
+
+A node a central deploy pipeline cannot reach (no stable inbound route, or
+behind a NAT/firewall) can instead pull updates on a timer. The node
+retrieves a DNS TXT pointer to the target system closure, substitutes it
+(signature-verified) from your binary cache, switches to it *live* (no
+reboot), then verifies the workload with a local health check. If the health
+check fails, the node rolls back automatically — a stand-in for a push
+controller's remote rollback, which only works when the controller can still
+reach the node.
+
+Enable alongside `deploy-target` for a node that both pulls *and* accepts
+pushes from a controller when it is reachable.
 
 ```nix
 {
@@ -97,10 +126,31 @@ NixOS distribution, most of it is not ready for that yet.
         {
           nixvps.pullUpdate = {
             enable = true;
-            cache = "https://cache.example.com";     # your signed binary cache
-            domain = "example.com";                    # zone for the _deploy.<host> TXT pointer
-            healthUnits = [ "sshd" "my-app" ];          # units that must stay active
-            # healthUrl = "https://example.com/health"; # optional HTTP health check
+
+            # REQUIRED: the signed binary cache to pull closures from.
+            cache = "https://cache.example.com";
+
+            # REQUIRED unless you set `pointerName` directly: the DNS zone
+            # under which _deploy.<hostname>.<domain> TXT record is published
+            # by your build pipeline after each build.
+            domain = "example.com";
+
+            # Optional: HTTP endpoint to check after a switch. If it does not
+            # return 2xx, the switch is rolled back. (default: null / units-only)
+            healthUrl = "https://example.com/health";
+
+            # Systemd units that must all be active after a switch.
+            # Replace with the units your workload depends on.
+            # (default: ["sshd"] — only ensures the VM is reachable)
+            healthUnits = [ "sshd" "my-app" ];
+
+            # Delay before the first pull after boot.
+            # (default: "10min")
+            onBootSec = "10min";
+
+            # Interval between pulls (OnUnitActiveSec).
+            # (default: "1d" — once a day; a missed tick doesn't cause a pile-up)
+            interval = "1d";
           };
         }
       ];
@@ -109,7 +159,20 @@ NixOS distribution, most of it is not ready for that yet.
 }
 ```
 
-### Using `deploy-target`
+### deploy-target: Trust a signed cache, accept signed deploys
+
+A node running a deploy-target is configured to:
+1. Trust a signed binary cache (`substituters` + `trusted-public-keys`) with
+   `require-sigs` enforced — so unsigned or wrongly-signed closures are never
+   accepted.
+2. Accept inbound SSH deploys: one or more SSH public keys are added to
+   root's `authorized_keys`, allowing a controller or operator to log in and
+   run `nixos-rebuild switch` or another deploy tool.
+
+This module performs *no* deploy logic itself — no timers, no polling, no
+health checks. Use it standalone for a push-deployed node, or alongside
+`pull-update` for a node that also self-updates; the two modules do not
+conflict.
 
 ```nix
 {
@@ -122,9 +185,29 @@ NixOS distribution, most of it is not ready for that yet.
         {
           nixvps.deployTarget = {
             enable = true;
+
+            # Signed binary cache URL(s) to substitute from.
+            # Added to nix.settings.substituters (does not replace nixpkgs' defaults).
+            # (default: [] / empty)
             caches = [ "https://cache.example.com" ];
+
+            # Public signing key(s) of the cache(s) above.
+            # Required for anything from `caches` to actually be substituted,
+            # since `require-sigs` is on by default.
+            # Format: "cache-hostname-N:base64-encoded-public-key="
+            # (default: [] / empty)
             trustedPublicKeys = [ "cache.example.com-1:base64-encoded-key=" ];
+
+            # SSH public keys for the deploy identity (added to root's
+            # authorized_keys additively — existing keys are preserved).
+            # (default: [] / empty)
             deployAuthorizedKeys = [ "ssh-ed25519 AAAA... deploy@example" ];
+
+            # Whether the nix daemon requires a valid signature before accepting
+            # any substituted path. Leave on unless you specifically trust unsigned
+            # closures.
+            # (default: true)
+            requireSigs = true;
           };
         }
       ];
@@ -132,6 +215,11 @@ NixOS distribution, most of it is not ready for that yet.
   };
 }
 ```
+
+## Full example
+
+See [`examples/configuration.nix`](examples/configuration.nix) for a minimal
+flake that enables all three modules together on a single host.
 
 ## Roadmap
 
