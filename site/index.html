@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <title>nixvps &mdash; NixOS profiles for tiny cloud VMs</title>
-  <meta name="description" content="NixOS profiles for the 1 GB-RAM class of cloud VMs: a conservative baseline, a reboot-less pull-update mechanism, and a signed deploy-target module. Pre-alpha - being extracted from a private fleet configuration.">
+  <title>nixvps &mdash; NixOS on sub-1GB VPSes, down to 256MB</title>
+  <meta name="description" content="NixOS on sub-1GB VPSes, down to a 256MB floor. Receiver-side modules for tiny VMs: tiny-vm and nano base profiles, image-bake for prebuilt boot, pull-update and deploy-target for signed delivery. Pre-alpha.">
 
   <meta name="theme-color" content="#0b1120" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 
   <meta property="og:title" content="nixvps">
-  <meta property="og:description" content="NixOS profiles for the 1 GB-RAM class of cloud VMs: a conservative baseline, a reboot-less pull-update mechanism, and a signed deploy-target module. Pre-alpha scaffold.">
+  <meta property="og:description" content="NixOS on sub-1GB VPSes, down to 256MB: receiver-side modules for tiny VMs, image-baking, and signed delivery.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://nixvps.corbet.ch">
   <meta name="twitter:card" content="summary">
@@ -34,11 +34,13 @@
 
   <div class="hero-content">
     <h1>nixvps</h1>
-    <p class="tagline">NixOS profiles for tiny cloud VMs</p>
-    <p class="subtitle">Reusable NixOS modules for the 1 GB-RAM class of
-    cloud instances &mdash; the walls almost everyone running NixOS on a
-    free-tier VPS hits eventually: a Nix daemon that can OOM the box, and
-    an update path that can't afford to risk an unreachable box.</p>
+    <p class="tagline">NixOS on sub-1GB VPSes, down to a 256MB floor</p>
+    <p class="subtitle">The receiver side of a tiny-VM deployment stack: reusable
+    NixOS modules for nodes from 256MB to 1GB RAM. Includes conservative base
+    profiles (tiny-vm, nano), signed delivery (pull-update, deploy-target), and
+    image-baking for boot-from-prebuilt instead of install-on-first-boot. The
+    producer side (build, sign, publish) is deliberately out of scope &mdash;
+    bring your own CI via the BUILD-CONTRACT.</p>
     <div class="cta">
       <a href="#status" class="btn btn-primary">Read the honest status</a>
       <a href="https://github.com/julian-corbet/nixvps-corbet-ch" class="btn btn-secondary">View on GitHub</a>
@@ -50,29 +52,29 @@
 
 <section id="status" class="how-it-works">
   <div class="container">
-    <h2>Status: pre-alpha</h2>
+    <h2>Status: pre-alpha, modules real</h2>
     <div class="steps">
       <div class="step">
         <div class="step-num">!</div>
-        <h3>Three real modules, nothing else</h3>
-        <p>Below is exactly what exists today: <code>tiny-vm</code>,
-        <code>pull-update</code>, and <code>deploy-target</code>. There is
-        no example configuration yet, and nothing here has been used
-        outside its original context.</p>
+        <h3>Five modules exist today</h3>
+        <p>Below is exactly what exists: <code>tiny-vm</code>, <code>nano</code>,
+        <code>pull-update</code>, <code>deploy-target</code>, and
+        <code>image-bake</code>. All five are real and functional; nothing
+        advertised here is missing or placeholder.</p>
       </div>
       <div class="step">
         <div class="step-num">!</div>
-        <h3>Being extracted</h3>
-        <p>These modules were developed and used for real inside a
-        private fleet configuration. Pulling them out into a
-        general-purpose, documented project is in progress.</p>
+        <h3>Being extracted and generalized</h3>
+        <p>These modules were developed and used in production. Pulling them
+        into a general-purpose, documented project is in progress. They carry
+        no site-specific defaults, but are still new and lightly documented.</p>
       </div>
       <div class="step">
         <div class="step-num">!</div>
-        <h3>No fake claims</h3>
-        <p>Nothing on this page describes a feature that doesn't exist
-        today. Everything under Roadmap is the plan, clearly marked as
-        such.</p>
+        <h3>No invented benchmarks</h3>
+        <p>Nothing on this page claims a tested MB number or specific
+        performance result. We target the 256MB–1GB class honestly. Everything
+        under Roadmap is future work, clearly marked as such.</p>
       </div>
     </div>
   </div>
@@ -80,39 +82,40 @@
 
 <section id="modules" class="features">
   <div class="container">
-    <h2>The three real modules</h2>
+    <h2>Five receiver-side modules</h2>
     <div class="feature-grid">
       <div class="feature">
         <h3>tiny-vm.nix</h3>
-        <p>A conservative baseline profile for small, RAM-constrained
-        cloud VMs &mdash; the ~1 vCPU / ~1 GB RAM / small-disk class:
-        btrfs mount tuning, a bounded journald, a clamped
-        <code>nix-daemon</code> (max-jobs, cores), automatic GC, and a
-        capped boot-loader generation count. Every setting is a
-        <code>lib.mkDefault</code>, so a consuming configuration can
-        override any single value without a fight.</p>
+        <p>A conservative baseline profile for the ~1 vCPU / ~1 GB RAM class:
+        btrfs mount tuning, bounded journald, clamped <code>nix-daemon</code>
+        (max-jobs, cores), automatic GC, and capped boot-loader generations.
+        Every setting is a <code>lib.mkDefault</code>, so overrides are painless.</p>
+      </div>
+      <div class="feature">
+        <h3>nano.nix</h3>
+        <p>An even tighter profile targeting the 256MB–512MB class: serial builds
+        only, aggressive journal limits, minimal systemd units, and constant-memory
+        monitoring. Designed for the absolute floor of tiny-VM viability.</p>
       </div>
       <div class="feature">
         <h3>pull-update.nix</h3>
-        <p>Autonomous, reboot-less, pull-based self-update for a node a
-        central deploy pipeline can't always reach. On a timer, the node
-        reads a signed pointer to the next
-        <code>system.build.toplevel</code>, substitutes it
-        (signature-verified, never built on-box), switches to it live,
-        runs a local health check, and rolls back to the last-known-good
-        generation on failure &mdash; no reboot anywhere in the cycle.</p>
+        <p>Autonomous, reboot-less, pull-based self-update for unreachable nodes.
+        On a timer, the node fetches a signed closure pointer, verifies it, switches
+        live, runs a local health check, and rolls back on failure. No reboot anywhere
+        in the cycle.</p>
       </div>
       <div class="feature">
         <h3>deploy-target.nix</h3>
-        <p><em>Just added.</em> The passive-receiver counterpart to
-        <code>pull-update</code>: configures a node to trust a signed
-        binary cache (<code>substituters</code> +
-        <code>trusted-public-keys</code>, with <code>require-sigs</code>
-        enforced) and to accept an inbound deploy via trusted keys in
-        root's <code>authorized_keys</code>. No timers, no polling, no
-        health checks of its own &mdash; it only establishes trust. Use it
-        standalone for a push-deployed node, or alongside
-        <code>pull-update</code> on a node that does both.</p>
+        <p>The passive receiver: configures a node to trust a signed binary cache
+        and accept inbound deploys via SSH. No timers, no polling, no health checks
+        of its own &mdash; just trust setup. Use alone for push-deployment, or with
+        <code>pull-update</code> for hybrid nodes.</p>
+      </div>
+      <div class="feature">
+        <h3>image-bake.nix</h3>
+        <p>Bake a bootable disk image instead of install-on-first-boot. Lets you
+        boot from a pre-built, signed image directly, skipping the build step entirely
+        on the target VM. Targets common image formats for cloud providers.</p>
       </div>
     </div>
   </div>
@@ -120,14 +123,20 @@
 
 <section class="features">
   <div class="container">
-    <h2>Explicitly out of scope</h2>
+    <h2>Deliberately out of scope</h2>
     <div class="feature-grid">
       <div class="feature">
-        <h3>Deep zram / zswap / OOM tuning</h3>
-        <p>Memory-pressure engineering below the system-shape layer
-        belongs to the sibling <a href="https://github.com/julian-corbet/nixram-corbet-ch">nixram</a>
-        project. nixvps assumes something like it already handles that
-        layer.</p>
+        <h3>The producer side</h3>
+        <p>Building, signing, and publishing closures or images is outside
+        nixvps. Bring your own CI, binary cache, and signing setup via the
+        <a href="https://github.com/julian-corbet/nixvps/blob/main/BUILD-CONTRACT.md">BUILD-CONTRACT</a>.
+        nixvps is the receiver: configure a node to pull and trust.</p>
+      </div>
+      <div class="feature">
+        <h3>Memory-pressure tuning</h3>
+        <p>Deep <code>zram</code> / <code>zswap</code> / OOM-killer engineering belongs to the
+        sibling <a href="https://github.com/julian-corbet/nixram-corbet-ch">nixram</a> project.
+        nixvps assumes that layer is already handled.</p>
       </div>
     </div>
   </div>
@@ -139,12 +148,13 @@
     <div class="table-scroll">
       <table>
         <tbody>
-          <tr><td>RAM-class base profile</td><td>Conservative daemon defaults, clamped <code>nix.settings</code> for <code>nix-daemon</code>. <strong>Done</strong> &mdash; <code>modules/tiny-vm.nix</code>.</td></tr>
-          <tr><td>Pull-based self-update module</td><td>Signed closure pointer, fetch, switch, local health-check rollback. <strong>Done</strong> &mdash; <code>modules/pull-update.nix</code>.</td></tr>
-          <tr><td>Deploy-target module</td><td>Trust a signed binary cache, accept a signed deploy. <strong>Done</strong> &mdash; <code>modules/deploy-target.nix</code>.</td></tr>
-          <tr><td>Disk-image baking module</td><td><code>systemd-repart</code> / <code>disko</code> patterns, boot-from-image instead of install-on-first-boot. Not started.</td></tr>
-          <tr><td>Example configuration</td><td>A minimal config wiring all three modules together end to end. Not started.</td></tr>
-          <tr><td>Documentation site content</td><td>A real quickstart, once there is something to start with. Not started.</td></tr>
+          <tr><td>1 GB-RAM base profile</td><td>Conservative daemon defaults, clamped <code>nix.settings</code>. <strong>Done</strong> &mdash; <code>modules/tiny-vm.nix</code>.</td></tr>
+          <tr><td>256MB-floor profile</td><td>Minimum viable for the absolute tiny class. <strong>Done</strong> &mdash; <code>modules/nano.nix</code>.</td></tr>
+          <tr><td>Pull-based self-update</td><td>Signed closure fetch, live switch, health-check rollback. <strong>Done</strong> &mdash; <code>modules/pull-update.nix</code>.</td></tr>
+          <tr><td>Deploy-target module</td><td>Trust signed cache, accept signed deploys. <strong>Done</strong> &mdash; <code>modules/deploy-target.nix</code>.</td></tr>
+          <tr><td>Image-bake module</td><td>Boot-from-prebuilt instead of install-on-first-boot. <strong>Done</strong> &mdash; <code>modules/image-bake.nix</code>.</td></tr>
+          <tr><td>Example configuration</td><td>Minimal flake wiring all five modules end to end. In progress.</td></tr>
+          <tr><td>Documentation and quickstart</td><td>Real usage guide once examples are complete. Planned.</td></tr>
         </tbody>
       </table>
     </div>

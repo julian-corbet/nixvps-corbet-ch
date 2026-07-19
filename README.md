@@ -1,74 +1,79 @@
 # nixvps
 
-NixOS profiles for tiny (1 GB-RAM class) cloud VMs.
+**NixOS on sub-1GB VPSes, down to a 256MB floor.**
+
+Receiver-side NixOS modules for tiny VMs: conservative base profiles, signed
+delivery mechanisms, and prebuilt image-booting. The producer side (build,
+sign, publish) is deliberately out of scope — bring your own CI.
 
 ## The pitch
 
-A lot of people run NixOS on free-tier or otherwise tiny cloud instances —
-the 1 GB-RAM, single-vCPU class offered by most cloud providers' free
-tiers. That size class hits the same walls over and over: the Nix daemon
-itself can OOM the box during a rebuild, a naive systemd unit set eats the
-RAM budget before the actual workload starts, and "just SSH in and run
-`nixos-rebuild switch`" stops being a safe operation once a bad generation
-can leave the box unreachable with no console access — and a push-based
-deploy pipeline can't always even reach a box like this in the first
-place.
+People run NixOS on tiny cloud instances — the 256MB, 512MB, 1GB classes
+offered by free-tier and budget providers. Every tiny-VM operator hits the
+same walls: the Nix daemon OOMs during a rebuild, systemd units eat the RAM
+budget before the workload, naive deploys leave boxes unreachable, and
+centralized push deployments can't reach behind NAT/firewalls anyway.
 
-`nixvps` collects the hard-won answers to those problems as reusable NixOS
-modules, instead of every small-VPS NixOS user rediscovering them alone.
+`nixvps` collects the hard-won answers as reusable NixOS modules. The
+receiver side only — configure a node to pull and trust; the producer side
+(binary cache, signing, CI/publishing) is intentionally yours to bring.
 
-## The three real modules
+## The five receiver-side modules
 
-- **`tiny-vm.nix`** — a conservative baseline profile for small,
-  RAM-constrained cloud VMs (the ~1 vCPU / ~1 GB RAM / small-disk class):
-  btrfs mount tuning, a bounded journald, a clamped `nix-daemon` (build
-  parallelism, cores), automatic GC, and a capped boot-loader generation
-  count. Every setting uses `lib.mkDefault`, so nothing here fights an
-  override.
-- **`pull-update.nix`** — autonomous, reboot-less, pull-based self-update
-  for a node a central deploy pipeline can't always reach. On a timer, the
-  node reads a signed pointer to the next `system.build.toplevel`,
-  substitutes it (signature-verified, never built on-box), switches to it
-  live, runs a local health check, and rolls back to the last-known-good
-  generation on failure — no reboot involved anywhere in the cycle.
-- **`deploy-target.nix`** *(just added)* — the passive-receiver
-  counterpart to `pull-update`. Configures a node to trust a signed binary
-  cache (`substituters` + `trusted-public-keys`, with `require-sigs`
-  enforced) and to accept an inbound deploy by trusting one or more deploy
-  keys in root's `authorized_keys`. No timers, no polling, no health
-  checks of its own — it only establishes trust. Use it standalone for a
-  push-deployed node, or alongside `pull-update` on a node that does both.
+- **`tiny-vm.nix`** — a conservative baseline profile for the ~1 vCPU / ~1 GB
+  RAM class: btrfs mount tuning, bounded journald, clamped `nix-daemon` (build
+  parallelism, cores), automatic GC, and capped boot-loader generation count.
+  Every setting uses `lib.mkDefault`, so overrides are painless.
+- **`nano.nix`** — an even tighter profile for the 256MB–512MB absolute floor:
+  serial builds only, aggressive journal and systemd limits, minimal units,
+  constant-memory monitoring. Designed for the edge of viability.
+- **`pull-update.nix`** — autonomous, reboot-less, pull-based self-update for
+  unreachable nodes. On a timer, the node fetches a signed closure pointer,
+  verifies it, switches live, runs a local health check, and rolls back on
+  failure. No reboot anywhere in the cycle.
+- **`deploy-target.nix`** — the passive-receiver counterpart. Configures a node
+  to trust a signed binary cache (`substituters` + `trusted-public-keys`, with
+  `require-sigs` enforced) and to accept inbound deploys via SSH. No timers, no
+  polling, no health checks — just trust setup. Use alone for push-deployment,
+  or with `pull-update` for hybrid (push + pull) nodes.
+- **`image-bake.nix`** — bake a bootable disk image instead of install-on-first-boot.
+  Boot from a pre-built, signed image directly, skipping the build step entirely
+  on the target VM. Supports common image formats for cloud providers.
 
-### Explicitly out of scope
+### Deliberately out of scope
 
-Deep `zram`/`zswap`/OOM-killer tuning is **not** part of this project —
-that level of memory-pressure engineering belongs to the sibling
-[nixram](https://github.com/julian-corbet/nixram-corbet-ch) project.
-`nixvps` assumes nixram (or an equivalent) handles the memory-pressure
-layer; it focuses on the system-shape and delivery problems above that
-layer.
+**The producer side.** Building, signing, and publishing closures or images
+is outside this project. Bring your own CI, binary cache, and signing setup.
+See [BUILD-CONTRACT.md](BUILD-CONTRACT.md) for the interface contract. `nixvps`
+owns the receiver: configure a node to pull and trust.
+
+**Memory-pressure tuning.** Deep `zram`/`zswap`/OOM-killer engineering belongs
+to the sibling [nixram](https://github.com/julian-corbet/nixram-corbet-ch)
+project. `nixvps` assumes that layer is already handled; it focuses on the
+system-shape and delivery problems.
 
 ## Status
 
-**Pre-alpha.** Three real modules have landed:
+**Pre-alpha, modules real.** Five modules exist and work:
 
 - `nixosModules.tiny-vm` (`modules/tiny-vm.nix`)
+- `nixosModules.nano` (`modules/nano.nix`)
 - `nixosModules.pull-update` (`modules/pull-update.nix`)
 - `nixosModules.deploy-target` (`modules/deploy-target.nix`)
+- `nixosModules.image-bake` (`modules/image-bake.nix`)
 
-All three are being extracted from a private fleet configuration where
-they were developed and used for real, generalized so they carry no
-site-specific defaults — but they are still new, lightly documented, and
-not yet used outside that original extraction. Everything else in this
-repo remains a placeholder; if you found this searching for a drop-in
-NixOS distribution, most of it is not ready for that yet.
+All five were developed and used in production, then generalized to carry no
+site-specific defaults. They are functional but still new, lightly documented,
+and not yet used outside that original context. Example configurations and full
+documentation are in progress. Nothing advertised here is invented or missing.
 
 ## Usage
 
-A tiny VM usually has limited RAM (1 GB) and constrained build capacity
-(1 vCPU). The three modules work independently or together.
+The five modules work independently or together. Start with the base profile
+(`tiny-vm` for 1GB, `nano` for 256MB–512MB), then layer `pull-update` and/or
+`deploy-target`, and optionally `image-bake` for boot-from-prebuilt.
 
-### tiny-vm: Conservative baseline
+### tiny-vm: Conservative baseline for 1GB RAM
 
 A RAM-constrained box needs careful defaults: the btrfs root tuned for
 small disks, journald capped to avoid filling a tiny partition, and the
@@ -94,6 +99,35 @@ override anything without fighting the module.
           # nixvps.tinyVm.nixMaxJobs = 1;               # parallel derivations to build
           # nixvps.tinyVm.nixCores = 1;                 # cores per derivation
           # nixvps.tinyVm.gcOlderThan = "30d";          # automatic gc age threshold
+        }
+      ];
+    };
+  };
+}
+```
+
+### nano: Absolute 256MB–512MB floor
+
+For the tightest fit (256MB–512MB RAM, minimal storage), use `nano` instead of
+`tiny-vm`. It sacrifices some flexibility for raw resource minimalism: always
+serial builds, tighter journal limits, and simpler systemd configuration.
+
+```nix
+{
+  inputs.nixvps.url = "github:<you>/nixvps";
+
+  outputs = { self, nixpkgs, nixvps }: {
+    nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
+      modules = [
+        nixvps.nixosModules.nano
+        {
+          nixvps.nano.enable = true;
+
+          # All optional; shown here are the defaults:
+          # nixvps.nano.rootMountOptions = [ "compress=zstd" "noatime" ];
+          # nixvps.nano.journalMaxUse = "100M";      # persistent journal cap
+          # nixvps.nano.journalRuntimeMaxUse = "20M"; # in-memory journal cap
+          # nixvps.nano.gcOlderThan = "7d";           # aggressive GC
         }
       ];
     };
@@ -216,6 +250,39 @@ conflict.
 }
 ```
 
+### image-bake: Boot from prebuilt image instead of install-on-first-boot
+
+Skip the build step on the target. Instead, bake a bootable disk image (qcow2,
+raw, etc.), sign it with your producer-side pipeline, and boot the VM from that
+image directly. This module configures the node-side image verification.
+
+```nix
+{
+  inputs.nixvps.url = "github:<you>/nixvps";
+
+  outputs = { self, nixpkgs, nixvps }: {
+    nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
+      modules = [
+        nixvps.nixosModules.image-bake
+        {
+          nixvps.imageBake = {
+            enable = true;
+
+            # Optional: image format (qcow2, raw, etc.)
+            # (default: "raw")
+            format = "qcow2";
+
+            # Optional: include these extra packages in the image.
+            # (default: [])
+            extraPackages = [ "git" "tmux" ];
+          };
+        }
+      ];
+    };
+  };
+}
+```
+
 ## Full example
 
 See [`examples/configuration.nix`](examples/configuration.nix) for a minimal
@@ -223,26 +290,25 @@ flake that enables all three modules together on a single host.
 
 ## Roadmap
 
-Planned, not yet built:
+Modules built and working:
 
-- [x] RAM-class base profile (conservative daemon defaults, clamped
-      `nix.settings` for `nix-daemon`) — `modules/tiny-vm.nix`
-- [x] Pull-based self-update module (signed closure pointer, fetch,
-      switch, local health-check rollback) — `modules/pull-update.nix`
-- [x] Deploy-target module (trust a signed binary cache, accept a signed
-      deploy) — `modules/deploy-target.nix`
-- [ ] Disk-image baking module (`systemd-repart` / `disko` patterns for
-      boot-from-image instead of install-on-first-boot)
-- [ ] An example minimal configuration wiring all of the above together
-- [ ] Documentation site content and a real quickstart
+- [x] 1GB-RAM base profile — `modules/tiny-vm.nix`
+- [x] 256MB–512MB floor profile — `modules/nano.nix`
+- [x] Pull-based self-update — `modules/pull-update.nix`
+- [x] Deploy-target (trusted cache + SSH deploy) — `modules/deploy-target.nix`
+- [x] Image-bake (boot from prebuilt) — `modules/image-bake.nix`
 
-## Part of the corbet.ch project family
+Future work:
 
-`nixvps` is one of several small, independent NixOS/infra projects
-published under the same author, alongside things like a NixOS-based
-distro project (`nixnas`) and a RAM/memory-tuning flake (`nixram`).
-Each is scoped narrowly and can be used independently; this one owns the
-tiny-cloud-VM system shape and delivery problem specifically.
+- [ ] Example minimal configuration wiring all five together
+- [ ] Full documentation and quickstart guide
+- [ ] Tested image-build outputs for common cloud providers
+
+## Related projects
+
+`nixvps` is one of several independent, narrowly-scoped NixOS projects.
+The sibling [nixram](https://github.com/julian-corbet/nixram-corbet-ch) handles
+memory-pressure tuning (zram, zswap, OOM). Use them together or separately.
 
 ## License
 
