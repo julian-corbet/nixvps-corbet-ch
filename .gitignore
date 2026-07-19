@@ -6,3 +6,6 @@ result-*
 # Editor / OS
 .DS_Store
 *.swp
+
+# Cloudflare wrangler local cache (holds account id + name — never commit)
+.wrangler/
