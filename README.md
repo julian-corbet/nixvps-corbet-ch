@@ -307,9 +307,15 @@ Future work:
 
 ## Related projects
 
-`nixvps` is one of several independent, narrowly-scoped NixOS projects.
-The sibling [nixram](https://github.com/julian-corbet/nixram-corbet-ch) handles
-memory-pressure tuning (zram, zswap, OOM). Use them together or separately.
+`nixvps` is one of several independent, narrowly-scoped NixOS/Nix projects.
+[nixram](https://github.com/julian-corbet/nixram-corbet-ch) handles
+memory-pressure tuning (zram, zswap, OOM); **nixarch** does the same
+"declarative machines" idea for the Arch/AUR family;
+[nixremote](https://github.com/julian-corbet/nixremote-corbet-ch) forwards
+native Wayland app windows cross-machine;
+[nixfish](https://github.com/julian-corbet/nixfish-corbet-ch) is the
+safe-adoption pattern for declarative fish shell config. Use them together
+or separately.
 
 ## License
 
