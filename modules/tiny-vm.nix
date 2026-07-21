@@ -88,6 +88,21 @@ in
         default.
       '';
     };
+
+    interactiveShellSafety = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Confirm-before-clobber aliases (`rm`/`cp`/`mv` -&gt; `-i`) for
+        interactive shells. This matters more on a box in this class than
+        on a normal desktop: there is deliberately no snapshot/backup layer
+        under a bare cloud VM the way there is on the rest of the fleet, so
+        a fat-fingered command here has no safety net underneath it. Set via
+        plain `environment.shellAliases` — no fish, no home-manager; NixOS
+        applies it to every user's shell regardless of which one an
+        interactive session actually uses.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -123,5 +138,12 @@ in
     # effect on bootloaders that honor the option (e.g. systemd-boot); it
     # is harmless to set unconditionally.
     boot.loader.systemd-boot.configurationLimit = lib.mkDefault 10;
+
+    # Confirm-before-clobber safety net (see interactiveShellSafety above).
+    environment.shellAliases = lib.mkIf cfg.interactiveShellSafety {
+      rm = lib.mkDefault "rm -i";
+      cp = lib.mkDefault "cp -i";
+      mv = lib.mkDefault "mv -i";
+    };
   };
 }

@@ -30,7 +30,8 @@
           nixvps.tinyVm.enable = true;
           # Defaults: compress=zstd, noatime, space_cache=v2 on btrfs root;
           # journald capped at 200M persistent / 50M in-memory; nix max-jobs=1
-          # cores=1; auto-gc weekly older than 30d; bootloader limited to 10 generations.
+          # cores=1; auto-gc weekly older than 30d; bootloader limited to 10 generations;
+          # rm/cp/mv aliased to their -i (confirm-before-clobber) forms.
           # Override any:
           # nixvps.tinyVm.journalMaxUse = "100M";
           # nixvps.tinyVm.nixCores = 2;

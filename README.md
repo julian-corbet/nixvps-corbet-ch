@@ -99,6 +99,7 @@ override anything without fighting the module.
           # nixvps.tinyVm.nixMaxJobs = 1;               # parallel derivations to build
           # nixvps.tinyVm.nixCores = 1;                 # cores per derivation
           # nixvps.tinyVm.gcOlderThan = "30d";          # automatic gc age threshold
+          # nixvps.tinyVm.interactiveShellSafety = true; # rm/cp/mv -> -i aliases
         }
       ];
     };
