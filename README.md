@@ -18,7 +18,7 @@ centralized push deployments can't reach behind NAT/firewalls anyway.
 receiver side only — configure a node to pull and trust; the producer side
 (binary cache, signing, CI/publishing) is intentionally yours to bring.
 
-## The five receiver-side modules
+## The six receiver-side modules
 
 - **`tiny-vm.nix`** — a conservative baseline profile for the ~1 vCPU / ~1 GB
   RAM class: btrfs mount tuning, bounded journald, clamped `nix-daemon` (build
@@ -39,6 +39,13 @@ receiver side only — configure a node to pull and trust; the producer side
 - **`image-bake.nix`** — bake a bootable disk image instead of install-on-first-boot.
   Boot from a pre-built, signed image directly, skipping the build step entirely
   on the target VM. Supports common image formats for cloud providers.
+- **`lifeline.nix`** — four independently toggleable "never lose a headless
+  tiny VM" mechanisms: `watchdog` (detect overlay/agent isolation and climb
+  a restart-then-reboot escalation ladder), `sshLifeline` (keep sshd itself
+  from becoming the failure — on by default), `console` (a serial "flight
+  recorder": error-and-worse journal output forwarded to a serial console),
+  and `heartbeat` (a dead-man's-switch ping to an external monitoring URL,
+  over normal public egress, never the overlay). Enable any subset.
 
 ### Deliberately out of scope
 
@@ -54,24 +61,32 @@ system-shape and delivery problems.
 
 ## Status
 
-**Pre-alpha, modules real.** Five modules exist and work:
+**Pre-alpha, modules real.** Six modules exist and work:
 
 - `nixosModules.tiny-vm` (`modules/tiny-vm.nix`)
 - `nixosModules.nano` (`modules/nano.nix`)
 - `nixosModules.pull-update` (`modules/pull-update.nix`)
 - `nixosModules.deploy-target` (`modules/deploy-target.nix`)
 - `nixosModules.image-bake` (`modules/image-bake.nix`)
+- `nixosModules.lifeline` (`modules/lifeline.nix`)
 
-All five were developed and used in production, then generalized to carry no
-site-specific defaults. They are functional but still new, lightly documented,
-and not yet used outside that original context. Example configurations and full
-documentation are in progress. Nothing advertised here is invented or missing.
+The first five were developed and used in production, then generalized to
+carry no site-specific defaults. `lifeline.nix` is newer: written directly
+against this generalized, no-site-specifics design from the start, and
+verified by NixOS module evaluation (`nix eval`, plus a toy `nixosSystem`
+exercising all four mechanisms together) rather than by prior production
+runtime. All six are functional but still lightly documented and not yet
+used outside their original context (the first five) or run on a real VM
+(`lifeline.nix`). Example configurations and full documentation are in
+progress. Nothing advertised here is invented or missing.
 
 ## Usage
 
-The five modules work independently or together. Start with the base profile
+The six modules work independently or together. Start with the base profile
 (`tiny-vm` for 1GB, `nano` for 256MB–512MB), then layer `pull-update` and/or
-`deploy-target`, and optionally `image-bake` for boot-from-prebuilt.
+`deploy-target`, optionally `image-bake` for boot-from-prebuilt, and
+`lifeline` for the four independently toggleable "never lose this box"
+mechanisms.
 
 ### tiny-vm: Conservative baseline for 1GB RAM
 
@@ -284,10 +299,97 @@ image directly. This module configures the node-side image verification.
 }
 ```
 
+### lifeline: never lose a headless tiny VM
+
+Four independently toggleable mechanisms under `nixvps.lifeline.*`. Enable
+any subset — none of them depend on each other.
+
+```nix
+{
+  inputs.nixvps.url = "github:<you>/nixvps";
+
+  outputs = { self, nixpkgs, nixvps }: {
+    nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
+      modules = [
+        nixvps.nixosModules.lifeline
+        {
+          # ─── watchdog: detect overlay/agent isolation, escalate to recover ─
+          nixvps.lifeline.watchdog = {
+            enable = true;
+
+            # REQUIRED: the overlay/mesh interface to probe through.
+            iface = "wt0";
+
+            # At least one of probeTargets / managementCheck is REQUIRED
+            # (an assertion enforces this) — otherwise there is no signal
+            # to tell real isolation from nothing configured to check.
+            probeTargets = [ "100.64.0.1" ];
+            # managementCheck = "curl -fsS http://127.0.0.1:8080/status | grep -q connected";
+
+            # REQUIRED: the overlay/mesh agent's systemd unit, restarted at
+            # tier 1 (e.g. netbird.service, tailscaled.service, wg-quick@wt0.service).
+            agentUnit = "netbird.service";
+
+            # Tolerate this much continuous isolation before tier 1 fires at
+            # all. (default: 15)
+            graceMinutes = 15;
+
+            # Tier 3 (systemctl reboot) is off unless you opt in.
+            # (default: false)
+            allowSelfReboot = false;
+
+            # If allowSelfReboot is true, tier 3 fires after this many hours
+            # of CONTINUOUS isolation, regardless of tier 1/2 attempts already
+            # made. (default: 6)
+            rebootAfterHours = 6;
+          };
+
+          # ─── sshLifeline: keep sshd itself from becoming the failure ──────
+          # ON by default just from importing this module. Set enable = false
+          # if you manage sshd entirely yourself.
+          nixvps.lifeline.sshLifeline = {
+            enable = true;
+            clientAliveInterval = 60; # default
+            clientAliveCountMax = 5; # default
+          };
+
+          # ─── console: serial flight recorder ───────────────────────────────
+          nixvps.lifeline.console = {
+            enable = true;
+            device = "ttyS0"; # default; match your provider's serial console
+            baud = 115200; # default
+            maxLevelConsole = "err"; # default — only err-and-worse reaches serial
+            # UNAUTHENTICATED root getty on the serial device. Read the
+            # option description before enabling — trades authentication for
+            # guaranteed recoverability. (default: false)
+            serialAutologin = false;
+          };
+
+          # ─── heartbeat: external dead-man's-switch ping ────────────────────
+          nixvps.lifeline.heartbeat = {
+            enable = true;
+
+            # REQUIRED: your monitoring provider's push/dead-man's-switch URL.
+            url = "https://hc-ping.com/00000000-0000-0000-0000-000000000000";
+
+            intervalMinutes = 5; # default
+            timeoutSeconds = 10; # default
+            # Never defaults to watchdog.iface — see the option description.
+            # bindInterface = "eth0";
+          };
+        }
+      ];
+    };
+  };
+}
+```
+
 ## Full example
 
 See [`examples/configuration.nix`](examples/configuration.nix) for a minimal
-flake that enables all three modules together on a single host.
+flake that enables the `tiny-vm`/`pull-update`/`deploy-target` trio together
+on a single host, and [`examples/lifeline.nix`](examples/lifeline.nix) for
+all four `nixvps.lifeline.*` mechanisms together.
 
 ## Roadmap
 
@@ -298,10 +400,11 @@ Modules built and working:
 - [x] Pull-based self-update — `modules/pull-update.nix`
 - [x] Deploy-target (trusted cache + SSH deploy) — `modules/deploy-target.nix`
 - [x] Image-bake (boot from prebuilt) — `modules/image-bake.nix`
+- [x] Lifeline (watchdog + sshLifeline + console + heartbeat) — `modules/lifeline.nix`
 
 Future work:
 
-- [ ] Example minimal configuration wiring all five together
+- [ ] Example minimal configuration wiring all six together
 - [ ] Full documentation and quickstart guide
 - [ ] Tested image-build outputs for common cloud providers
 

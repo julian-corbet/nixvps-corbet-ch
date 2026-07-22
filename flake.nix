@@ -28,6 +28,11 @@
         # image itself with:
         #   nix build .#nixosConfigurations.<name>.config.system.build.image
         image-bake = ./modules/image-bake.nix;
+        # Four independently toggleable "never lose a headless tiny VM"
+        # mechanisms (connectivity watchdog, sshd lifeline, serial console
+        # flight recorder, external heartbeat). See modules/lifeline.nix.
+        # Enable via `nixvps.lifeline.<mechanism>.enable = true;`.
+        lifeline = ./modules/lifeline.nix;
       };
 
       lib = { };

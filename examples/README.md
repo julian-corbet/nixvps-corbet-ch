@@ -21,6 +21,15 @@ deploying.
 
 To check parsing: `nix-instantiate --parse configuration.nix`.
 
+## lifeline: all four mechanisms
+
+**`lifeline.nix`** — a complete flake demonstrating `nixvps.lifeline.watchdog`,
+`.sshLifeline`, `.console`, and `.heartbeat` enabled together on one host,
+with generic values (overlay interface, probe IPs, agent unit, serial
+device, monitoring URL) throughout.
+
+To check parsing: `nix-instantiate --parse lifeline.nix`.
+
 ## Per-module quickstart
 
 See the main [README](../README.md) for copy-pasteable per-module snippets
