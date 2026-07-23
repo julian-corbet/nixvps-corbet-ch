@@ -1,7 +1,7 @@
 # examples
 
 Minimal, working, option-accurate example configurations showing how to use
-the three nixvps modules in a real NixOS flake.
+the nixvps modules in a real NixOS flake.
 
 ## Minimal example with all three modules
 

@@ -42,7 +42,11 @@
 #
 #   - Serial console: some providers only expose serial (no framebuffer/VNC)
 #     and need a kernel console on e.g. ttyS0 to show you anything during
-#     boot. Add it in your host config, e.g.:
+#     boot. This repo's own `nixvps.lifeline.console` module sets
+#     `boot.kernelParams` for you:
+#       nixvps.lifeline.console = { enable = true; device = "ttyS0"; baud = 115200; };
+#     wire it into the SAME host config that enables imageBake. Setting it
+#     by hand instead is just:
 #       boot.kernelParams = [ "console=ttyS0,115200n8" "console=tty0" ];
 #
 #   - Disk growth / cloud-init: the root FILESYSTEM auto-grows via the GPT
