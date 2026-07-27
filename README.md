@@ -416,8 +416,8 @@ memory-pressure tuning (zram, zswap, OOM); **nixarch** does the same
 "declarative machines" idea for the Arch/AUR family;
 [nixremote](https://github.com/julian-corbet/nixremote-corbet-ch) forwards
 native Wayland app windows cross-machine;
-[nixfish](https://github.com/julian-corbet/nixfish-corbet-ch) is the
-safe-adoption pattern for declarative fish shell config. Use them together
+[nixsh](https://github.com/julian-corbet/nixsh-corbet-ch) is the
+safe-adoption pattern for declarative shell config, across fish, bash and zsh. Use them together
 or separately.
 
 ## License
