@@ -18,11 +18,10 @@
 #   (https://github.com/julian-corbet/nixram-corbet-ch) — nixram decides
 #   HOW MUCH memory pressure relief to apply and how aggressively;
 #   `nano.nix` only makes sure the box has the *structural* room for that
-#   tuning to matter in the first place. The one exception is
-#   `enableZramSwap`, which flips on zram swap as a bare structural
-#   safety net (a 256 MB box with zero swap has no cushion at all) — but
-#   even that toggle does not choose a size, algorithm, or swappiness;
-#   those remain nixram's decisions to make on top of this.
+#   tuning to matter in the first place. There is no longer any exception:
+#   this module previously carved one out for turning zram on itself, and
+#   that carve-out was the bug -- see the swap note in the config body below.
+#   Pair this module with `services.nixram.mode = "zram"` for the cushion.
 #
 # The three-project split, restated: nixvps/nano.nix = structural
 # survival (this file). nixram = RAM-pressure tuning. pull-update /
@@ -42,20 +41,6 @@ in
 {
   options.nixvps.nano = {
     enable = lib.mkEnableOption "extreme low-end (~256MB) NixOS VPS survival profile";
-
-    enableZramSwap = lib.mkOption {
-      type = lib.types.bool;
-      default = true;
-      description = ''
-        Turn on `zramSwap.enable` as a bare structural safety net — a
-        256 MB box with no swap at all has no cushion before the OOM
-        killer starts picking victims. This toggle only flips zram swap
-        ON; it does not pick a size, a compression algorithm, or a
-        swappiness value. Sizing and tuning that is nixram's job, not
-        this module's — set nixram's options on top of this if you want
-        anything other than its stock defaults.
-      '';
-    };
 
     enableManPages = lib.mkOption {
       type = lib.types.bool;
@@ -153,12 +138,18 @@ in
     # take the whole box down when it tries to build something anyway.
     systemd.services.nix-daemon.serviceConfig.MemoryMax = lib.mkDefault cfg.nixDaemonMemoryMax;
 
-    # --- Swap: structural safety only, not tuning.
+    # --- Swap: NOT declared here. nixram owns it, all of it.
     #
-    # This only flips zram swap on; it does not choose a size,
-    # compression algorithm, or swappiness — those are nixram's
-    # decisions, layered on top of this module, not this module's own.
-    zramSwap.enable = lib.mkDefault cfg.enableZramSwap;
+    # This module used to turn zram on itself as a "bare structural safety
+    # net", on the reasoning that a 256 MB box with no swap has no cushion at
+    # all. That reasoning is still true; the placement was not. Enabling zram
+    # through nixpkgs' own module renders the SAME
+    # /etc/systemd/zram-generator.conf that nixram's zram mode does, so the two
+    # cannot coexist: a host composing both gets a conflicting-definition eval
+    # error, and the "structural" toggle silently blocked the very tuning it
+    # claimed to be making room for. Set `services.nixram.mode = "zram"` (with
+    # a level) instead -- same cushion, plus a zram-resident-limit, which the
+    # nixpkgs path has no concept of.
 
     # --- Boot: deliberately minimal, deliberately unopinionated.
     #
