@@ -79,6 +79,52 @@ in
         to trust unsigned closures.
       '';
     };
+
+    httpConnections = lib.mkOption {
+      type = lib.types.nullOr lib.types.ints.positive;
+      default = null;
+      description = ''
+        `nix.settings.http-connections` — bounds the daemon's parallel HTTP
+        connections while substituting a signed closure from `caches`.
+        `null` (the default) leaves nix's own default untouched. Set this on
+        a RAM-constrained receiver so a large closure's substitution can't
+        wall the box into the OOM killer purely from download parallelism —
+        every byte in flight at once is a byte of RAM this receiver does not
+        get to spend on its actual workload.
+      '';
+    };
+
+    downloadBufferSize = lib.mkOption {
+      type = lib.types.nullOr lib.types.ints.positive;
+      default = null;
+      description = ''
+        `nix.settings.download-buffer-size`, in bytes — the in-RAM buffer the
+        nix daemon holds per in-flight substitution. `null` (the default)
+        leaves nix's own default untouched. Paired with `httpConnections` for
+        the same RAM-constrained-receiver reasoning.
+      '';
+    };
+
+    maxInplaceDeltaBytes = lib.mkOption {
+      type = lib.types.nullOr lib.types.ints.positive;
+      default = null;
+      description = ''
+        Pure DATA — not a `nix.settings` knob this module renders itself.
+        The largest download delta (NAR bytes of new store paths this node
+        would actually have to fetch, versus what it already has) that an
+        EXTERNAL deploy controller may activate here in place. `null` (the
+        default) means unbounded: a controller reading this value is
+        expected to treat `null` as "no ceiling, always safe to deploy in
+        place". Set it on a receiver small enough that an unbounded in-place
+        swap — a nixpkgs world-rebuild refetches ~every store path — risks
+        OOM-rebooting the box mid-activation; the external controller is
+        expected to route an over-ceiling delta to a prebuilt-image path
+        instead of activating the fat swap here. This module never reads its
+        own value: it exists so the receiver states the fact once, in the
+        same place as the rest of its substitution/trust configuration,
+        instead of every external controller keeping its own per-node table.
+      '';
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -87,6 +133,16 @@ in
       trusted-public-keys = lib.mkAfter cfg.trustedPublicKeys;
       require-sigs = cfg.requireSigs;
     };
+
+    # Substitution RAM-safety clamp. http-connections needs mkForce: nixpkgs'
+    # own nix.settings rendering already assigns it a plain (non-mkDefault)
+    # value, so a plain assignment here would lose that priority fight;
+    # download-buffer-size carries no such competing default, so a plain
+    # assignment wins cleanly. Both are `mkIf`-gated so leaving the option at
+    # its `null` default emits nothing at all (parity with never having set
+    # it), never a competing default of nix's own.
+    nix.settings.http-connections = lib.mkIf (cfg.httpConnections != null) (lib.mkForce cfg.httpConnections);
+    nix.settings.download-buffer-size = lib.mkIf (cfg.downloadBufferSize != null) cfg.downloadBufferSize;
 
     users.users.root.openssh.authorizedKeys.keys = lib.mkAfter cfg.deployAuthorizedKeys;
 

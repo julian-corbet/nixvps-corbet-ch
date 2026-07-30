@@ -258,6 +258,19 @@ conflict.
             # closures.
             # (default: true)
             requireSigs = true;
+
+            # Substitution RAM-safety clamp for a constrained receiver — bounds
+            # parallel HTTP connections and the per-download in-RAM buffer so a
+            # large closure's substitution can't OOM the box on download
+            # parallelism alone. (default: null / nix's own default, both)
+            httpConnections = 4;
+            downloadBufferSize = 64 * 1024 * 1024; # 64 MiB
+
+            # Pure data for an EXTERNAL deploy controller to read (this module
+            # never reads it itself): the largest in-place download delta this
+            # node can safely activate before the controller should route to a
+            # prebuilt image instead. (default: null / unbounded)
+            maxInplaceDeltaBytes = 500 * 1024 * 1024; # 500 MiB
           };
         }
       ];
