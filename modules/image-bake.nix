@@ -195,6 +195,29 @@ in
       '';
     };
 
+    imageSize = lib.mkOption {
+      type = lib.types.nullOr (lib.types.strMatching "^([0-9]+[KMGTP]?|auto)$");
+      default = null;
+      example = "10G";
+      description = ''
+        Total size of the produced disk image, passed straight through to
+        `image.repart.imageSize` (a `systemd-repart` size string: bytes with
+        an optional K/M/G/T suffix, or `"auto"`).
+
+        Left `null` (the default) leaves `image.repart.imageSize` at ITS OWN
+        default, `"auto"` -- systemd-repart sizes the image to the minimum
+        needed to hold the declared partitions, and the root filesystem then
+        grows to fill whatever real disk it lands on at first boot (see the
+        module header).
+
+        Set this explicitly when the image must come out at a FIXED size up
+        front instead -- e.g. because it is `dd`'d byte-for-byte onto a
+        target disk of that exact size and nothing at boot performs a
+        partition-table grow, so the baked image size IS the final disk
+        layout.
+      '';
+    };
+
     espSize = lib.mkOption {
       type = lib.types.str;
       default = "512M";
@@ -225,52 +248,57 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    image.repart = {
-      name = cfg.imageName;
-      sectorSize = cfg.sectorSize;
+    image.repart = lib.mkMerge [
+      {
+        name = cfg.imageName;
+        sectorSize = cfg.sectorSize;
 
-      compression = {
-        enable = cfg.format == "raw.zst";
-        algorithm = cfg.compressionAlgorithm;
-      };
-
-      partitions = {
-        "10-esp" = {
-          contents."/".source = espTree;
-          repartConfig = {
-            Type = "esp";
-            Format = "vfat";
-            Label = "disk-root-ESP";
-            SizeMinBytes = cfg.espSize;
-            SizeMaxBytes = cfg.espSize;
-          };
+        compression = {
+          enable = cfg.format == "raw.zst";
+          algorithm = cfg.compressionAlgorithm;
         };
 
-        "20-root" = {
-          storePaths = [ toplevel ];
-          # @nix is mounted at /nix at runtime, so the store must live in the
-          # @nix subvolume at `store/` (-> /nix/store). nixStorePrefix
-          # REPLACES the default `/nix/store`, so it must be `/@nix/store` —
-          # NOT `/@nix/nix/store` (which would put the store at
-          # /nix/nix/store and make `init=` above unresolvable: a silent
-          # early-boot hang with no serial output to explain it).
-          nixStorePrefix = "/@nix/store";
-          repartConfig = {
-            # `Type = "linux-generic"` sets the root-<arch> partition type
-            # GUID plus the GPT "grow this filesystem" attribute (bit 59) —
-            # this is what makes the root filesystem auto-expand to the real
-            # disk's size on first boot. It does not affect how partitions
-            # are found at runtime (that happens by partition LABEL).
-            Type = "linux-generic";
-            Format = "btrfs";
-            Label = "disk-root-root";
-            Subvolumes = [ "/@root" "/@nix" "/@log" ];
-            MakeDirectories = [ "/@root" "/@nix" "/@log" ];
-            DefaultSubvolume = "/@root";
-            SizeMinBytes = cfg.rootSize;
+        partitions = {
+          "10-esp" = {
+            contents."/".source = espTree;
+            repartConfig = {
+              Type = "esp";
+              Format = "vfat";
+              Label = "disk-root-ESP";
+              SizeMinBytes = cfg.espSize;
+              SizeMaxBytes = cfg.espSize;
+            };
+          };
+
+          "20-root" = {
+            storePaths = [ toplevel ];
+            # @nix is mounted at /nix at runtime, so the store must live in the
+            # @nix subvolume at `store/` (-> /nix/store). nixStorePrefix
+            # REPLACES the default `/nix/store`, so it must be `/@nix/store` —
+            # NOT `/@nix/nix/store` (which would put the store at
+            # /nix/nix/store and make `init=` above unresolvable: a silent
+            # early-boot hang with no serial output to explain it).
+            nixStorePrefix = "/@nix/store";
+            repartConfig = {
+              # `Type = "linux-generic"` sets the root-<arch> partition type
+              # GUID plus the GPT "grow this filesystem" attribute (bit 59) —
+              # this is what makes the root filesystem auto-expand to the real
+              # disk's size on first boot. It does not affect how partitions
+              # are found at runtime (that happens by partition LABEL).
+              Type = "linux-generic";
+              Format = "btrfs";
+              Label = "disk-root-root";
+              Subvolumes = [ "/@root" "/@nix" "/@log" ];
+              MakeDirectories = [ "/@root" "/@nix" "/@log" ];
+              DefaultSubvolume = "/@root";
+              SizeMinBytes = cfg.rootSize;
+            };
           };
         };
-      };
-    };
+      }
+      (lib.optionalAttrs (cfg.imageSize != null) {
+        imageSize = cfg.imageSize;
+      })
+    ];
   };
 }
