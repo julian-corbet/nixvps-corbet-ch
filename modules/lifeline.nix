@@ -25,9 +25,12 @@
 # endpoint) and your own risk tolerance.
 #
 # Every setting uses `lib.mkDefault` so a consuming configuration can
-# override any single value without a fight, except the two ExecStart
-# overrides that must genuinely win (`lib.mkForce`, each with the tradeoff
-# documented at the option that turns it on).
+# override any single value without a fight, except two places that must
+# genuinely win (`lib.mkForce`, each with the tradeoff documented at the
+# option that turns it on): the `serialAutologin` ExecStart override, and
+# `console`'s own `services.journald.extraConfig` the moment any of its
+# `systemMaxUse`/`systemMaxFileSize`/`runtimeMaxUse`/`maxRetentionSec` caps
+# are set (see `maxRetentionSec`'s description for why).
 
 { config, lib, pkgs, ... }:
 
@@ -182,6 +185,41 @@ let
     ++ lib.optionals (hb.bindInterface != null) [ "--interface" hb.bindInterface ]
     ++ [ hb.url ]
   );
+
+  # `services.journald.extraConfig` is `types.lines` — a single opaque string.
+  # Multiple modules' definitions at the SAME override priority concatenate,
+  # but at DIFFERENT priorities only the highest-priority one survives (no
+  # per-key merge either way) — so there is no way to contribute "just the
+  # console lines" and "just a size cap" as two independent, always-additive
+  # fragments. `consoleHasJournalCaps` decides which situation this is: with
+  # no caps set, stay `lib.mkDefault` (the historical behaviour — a consuming
+  # config can add its own extraConfig, or override this outright, without a
+  # fight); the moment ANY cap is set, the caller is making a deliberate
+  # policy statement about this box's journal, so escalate to `lib.mkForce`
+  # and own the option outright rather than risk it silently losing a
+  # concatenation race (or, worse, silently NOT losing one and producing a
+  # duplicate-key file whose winner depends on unspecified module order).
+  consoleHasJournalCaps =
+    console.systemMaxUse != null
+    || console.systemMaxFileSize != null
+    || console.runtimeMaxUse != null
+    || console.maxRetentionSec != null;
+
+  consoleJournalConfig =
+    ''
+      ForwardToConsole=yes
+      MaxLevelConsole=${console.maxLevelConsole}
+      RateLimitIntervalSec=${console.rateLimitIntervalSec}
+      RateLimitBurst=${toString console.rateLimitBurst}
+    ''
+    + lib.optionalString (console.systemMaxUse != null)
+      "SystemMaxUse=${console.systemMaxUse}\n"
+    + lib.optionalString (console.systemMaxFileSize != null)
+      "SystemMaxFileSize=${console.systemMaxFileSize}\n"
+    + lib.optionalString (console.runtimeMaxUse != null)
+      "RuntimeMaxUse=${console.runtimeMaxUse}\n"
+    + lib.optionalString (console.maxRetentionSec != null)
+      "MaxRetentionSec=${console.maxRetentionSec}\n";
 in
 {
   options.nixvps.lifeline = {
@@ -407,6 +445,74 @@ in
           the provider's console feature.
         '';
       };
+
+      systemMaxUse = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "50M";
+        description = ''
+          `SystemMaxUse=` in journald.conf — caps how much disk space the
+          persistent journal (`/var/log/journal`) may use in total. Unset
+          (the default) leaves journald's own default in effect (up to 10%
+          of the containing filesystem, capped at 4G) — set this on a tiny
+          VM whose disk makes that default too generous.
+
+          Bundled here rather than as a standalone top-level option because
+          setting it changes how this module has to author
+          `services.journald.extraConfig` — see `maxRetentionSec`'s
+          description below for the tradeoff that comes with setting ANY of
+          these four cap options.
+        '';
+      };
+
+      systemMaxFileSize = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "10M";
+        description = ''
+          `SystemMaxFileSize=` in journald.conf — caps the size of each
+          individual rotated journal file. Unset (the default) leaves
+          journald's own default in effect (a fraction of `systemMaxUse`).
+        '';
+      };
+
+      runtimeMaxUse = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "20M";
+        description = ''
+          `RuntimeMaxUse=` in journald.conf — caps how much of `/run`
+          (tmpfs, i.e. RAM) the volatile pre-persistent journal may use.
+          Unset (the default) leaves journald's own default in effect (up
+          to 10% of the containing tmpfs). Matters more than the disk caps
+          above on a RAM-constrained tiny VM.
+        '';
+      };
+
+      maxRetentionSec = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "2week";
+        description = ''
+          `MaxRetentionSec=` in journald.conf — deletes journal entries
+          older than this regardless of the size caps above. Unset (the
+          default) leaves journald's own default in effect (no time-based
+          retention limit; only the size caps apply).
+
+          ⚠ Setting ANY of `systemMaxUse` / `systemMaxFileSize` /
+          `runtimeMaxUse` / `maxRetentionSec` escalates this module's own
+          `services.journald.extraConfig` definition from `lib.mkDefault`
+          to `lib.mkForce` (see the file header). It will then win outright
+          over any OTHER module's own `services.journald.extraConfig` —
+          discarding it entirely rather than merging with it, because
+          `types.lines` cannot merge two definitions at different
+          priorities per-key. If some other module in your configuration
+          sets `services.journald.extraConfig` for something this module
+          doesn't cover, restate the value here instead (`rateLimitBurst`
+          above, for instance) rather than relying on that module's own
+          contribution surviving once any cap here is set.
+        '';
+      };
     };
 
     heartbeat = {
@@ -546,12 +652,9 @@ in
         # to be primary.
         boot.kernelParams = [ "console=${console.device},${toString console.baud}n8" ];
 
-        services.journald.extraConfig = lib.mkDefault ''
-          ForwardToConsole=yes
-          MaxLevelConsole=${console.maxLevelConsole}
-          RateLimitIntervalSec=${console.rateLimitIntervalSec}
-          RateLimitBurst=${toString console.rateLimitBurst}
-        '';
+        services.journald.extraConfig =
+          (if consoleHasJournalCaps then lib.mkForce else lib.mkDefault)
+            consoleJournalConfig;
 
         # NixOS's systemd getty-generator auto-enables `serial-getty@<tty>`
         # for any tty named in a `console=` kernel parameter, so listing
