@@ -101,7 +101,9 @@ let
     if [ "$probe_ok" = 1 ] || [ "$mgmt_ok" = 1 ]; then
       if [ -e "$FIRST_FAILURE_FILE" ]; then
         log "connectivity recovered -- clearing isolation state"
-        rm -f "$FIRST_FAILURE_FILE" "$TIER1_COUNT_FILE"
+        # watchdog-tier3-last goes too: it is a backoff for THIS isolation episode. Leaving it
+        # behind would suppress a legitimate tier-3 during the next, unrelated episode.
+        rm -f "$FIRST_FAILURE_FILE" "$TIER1_COUNT_FILE" "$STATE_DIR/watchdog-tier3-last"
       fi
       exit 0
     fi
@@ -126,10 +128,35 @@ let
     # isolation time, independent of how many tier-1/tier-2 attempts already
     # ran -- a box isolated this long gets rebooted regardless of what the
     # lower tiers already tried.
+    #
+    # ⚠ BUT AT MOST ONCE PER BACKOFF WINDOW. The isolation clock lives on persistent disk and
+    # is only cleared by recovery, so once `elapsed` passes the threshold it STAYS past it --
+    # across reboots, forever. Without the guard below, the first tick of every boot
+    # (OnBootSec=5min) saw elapsed >> threshold and rebooted immediately, so a box whose
+    # isolation a reboot cannot fix rebooted every 5 minutes indefinitely. That is worse than
+    # doing nothing twice over: it never recovers, AND it destroys the only window an operator
+    # has to log in and fix the actual cause. Observed in production: a firewall fault -- which
+    # no reboot could ever have repaired -- kept a host isolated for the better part of a day,
+    # and every remediation attempt had under five minutes to land before the box went down
+    # again.
+    #
+    # A reboot that did not restore connectivity is evidence that rebooting is not the answer.
+    # Retry on a long backoff (in case the cause was genuinely transient and slow to clear),
+    # never on the timer interval.
+    TIER3_LAST_FILE="$STATE_DIR/watchdog-tier3-last"
+    TIER3_BACKOFF_SEC=$(( REBOOT_AFTER_SEC ))
     if [ "$ALLOW_REBOOT" = 1 ] && [ "$elapsed" -ge "$REBOOT_AFTER_SEC" ]; then
-      loud "TIER 3: isolated for ''${elapsed}s (>= ''${REBOOT_AFTER_SEC}s) -- rebooting as a last resort"
-      systemctl reboot
-      exit 0
+      tier3_last=$(cat "$TIER3_LAST_FILE" 2>/dev/null || echo 0)
+      since_tier3=$(( now - tier3_last ))
+      if [ "$tier3_last" -gt 0 ] && [ "$since_tier3" -lt "$TIER3_BACKOFF_SEC" ]; then
+        log "TIER 3 suppressed: already rebooted ''${since_tier3}s ago (backoff ''${TIER3_BACKOFF_SEC}s) and the box is still isolated -- a reboot is not fixing this, leaving the box up so it can be reached"
+      else
+        loud "TIER 3: isolated for ''${elapsed}s (>= ''${REBOOT_AFTER_SEC}s) -- rebooting as a last resort"
+        echo "$now" > "$TIER3_LAST_FILE"
+        sync
+        systemctl reboot
+        exit 0
+      fi
     fi
 
     tier1_count=$(cat "$TIER1_COUNT_FILE" 2>/dev/null || echo 0)
