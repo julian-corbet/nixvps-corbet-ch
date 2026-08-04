@@ -69,6 +69,33 @@ in
       '';
     };
 
+    stagingDir = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "/var/lib/deploy-rs";
+      description = ''
+        A directory this node GUARANTEES exists for an inbound deploy to stage
+        into — created by systemd-tmpfiles, root-owned, mode 0700. `null` (the
+        default) creates nothing.
+
+        Set this whenever the deploy tool is pointed at a path outside `/tmp`.
+        The failure it prevents is specific and was hit in production: deploy-rs
+        with `magicRollback` runs `activate wait` on the node BEFORE activation,
+        and that step calls `notify`'s `watch()` on its `--temp-path` without
+        creating it. The directory IS created later, by `activation_confirmation`
+        — but the deploy never gets there, because `wait` has already failed with
+        ENOENT. So the first magic-rollback deploy to a fresh node with a custom
+        temp path cannot succeed, and every subsequent one works, which makes the
+        bug look like a one-off. The default `/tmp` always exists, which is why
+        this is invisible until someone moves the path somewhere that survives a
+        reboot.
+
+        A receiver guaranteeing its own staging directory is the right side of
+        that fix: the alternative is every deploy origin remembering to mkdir
+        over SSH first, which is the receiver's fact stated in the sender.
+      '';
+    };
+
     requireSigs = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -147,5 +174,11 @@ in
     users.users.root.openssh.authorizedKeys.keys = lib.mkAfter cfg.deployAuthorizedKeys;
 
     services.openssh.enable = lib.mkDefault true;
+
+    # 0700 root: whatever lands here is a canary file naming a system closure, and
+    # the deploy identity that writes it is root. Nothing else needs to read it.
+    systemd.tmpfiles.rules = lib.mkIf (cfg.stagingDir != null) [
+      "d ${cfg.stagingDir} 0700 root root -"
+    ];
   };
 }
