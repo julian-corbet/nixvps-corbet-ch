@@ -257,6 +257,17 @@ in
       serviceConfig = {
         Type = "oneshot";
         ExecStart = pull-update;
+        # This unit must be root to activate a NixOS system, but its fetcher
+        # state is service state, not root's interactive home.  Give Nix a
+        # stable cache for binary-cache metadata without leaving
+        # /root/.cache/nix behind after every timer tick.  HOME also contains
+        # any future per-user state in this explicitly owned directory.
+        StateDirectory = "pull-update";
+        CacheDirectory = "pull-update";
+        Environment = [
+          "HOME=/var/lib/pull-update"
+          "XDG_CACHE_HOME=/var/cache/pull-update"
+        ];
         # The script only orchestrates: `nix copy` runs in the nix-daemon's own
         # cgroup and the switched units live in their OWN slices, so capping
         # this unit can't starve the copy or an activation restart.

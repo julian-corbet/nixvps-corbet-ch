@@ -162,6 +162,10 @@ check fails, the node rolls back automatically — a stand-in for a push
 controller's remote rollback, which only works when the controller can still
 reach the node.
 
+The receiver activates as root, but it keeps its own state in
+`/var/lib/pull-update` and Nix's binary-cache metadata in
+`/var/cache/pull-update`; timer runs do not write Nix state into `/root`.
+
 Enable alongside `deploy-target` for a node that both pulls *and* accepts
 pushes from a controller when it is reachable.
 
