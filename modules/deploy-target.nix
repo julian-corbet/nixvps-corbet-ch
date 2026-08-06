@@ -25,6 +25,11 @@
 # empty/neutral so enabling with no other options changes nothing except
 # turning SSH on and honoring require-sigs (both already sane defaults for
 # a deploy-receiving node).
+#
+# OWNERSHIP STATUS: cache trust and guest-side resource clamps remain useful
+# guest facts. The inbound deploy identity, staging directory and delivery
+# ceiling overlap with nixdeploy and are marked for migration there. Concrete
+# keys, paths and ceilings always belong in a private consumer.
 
 { config, lib, ... }:
 

@@ -1,9 +1,18 @@
-# The Build Contract: Producer ↔ Node
+# The Current Build Contract: Producer ↔ Node
 
-`nixvps` is a **receiver** — the modules handle tiny-node system shape and
-autonomous update delivery. Builders and CI pipelines are **deliberately out of
-scope**: every team's build infrastructure is different, and nixvps does not
-prescribe yours.
+This document describes the delivery contract implemented by
+`pull-update.nix` and `deploy-target.nix` today. It is retained for users of
+those modules; it is not the target ownership boundary for the wider nix*
+family.
+
+In that target model, `nixvps` describes the constrained VPS guest,
+`nixboot` owns its boot artifacts, and `nixdeploy` is the sole owner of build
+and update triggers, publication, signed targets, receivers, activation,
+rollback, health outcomes, rescue materialisation, image upload/registration
+and reimage. Private infrastructure supplies concrete caches, keys,
+endpoints, provider identities and host policy. Until the existing modules
+are migrated or removed, the steps below remain an honest description of
+their current behavior.
 
 Instead, nixvps expects you to bring your own build system — whatever that is
 — and satisfy a simple contract so any producer can feed any nixvps node.

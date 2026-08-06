@@ -133,10 +133,9 @@ in
       options = lib.mkDefault "--delete-older-than ${cfg.gcOlderThan}";
     };
 
-    # Cap the number of kept boot-loader generations so old system closures
-    # don't accumulate indefinitely on a small disk. This only has any
-    # effect on bootloaders that honor the option (e.g. systemd-boot); it
-    # is harmless to set unconditionally.
+    # Transitional ownership overlap. This predates nixboot's ownership of
+    # boot-generation retention and is to be removed once consumers compose
+    # nixboot, which owns the final value.
     boot.loader.systemd-boot.configurationLimit = lib.mkDefault 10;
 
     # Confirm-before-clobber safety net (see interactiveShellSafety above).

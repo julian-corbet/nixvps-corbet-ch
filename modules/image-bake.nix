@@ -70,6 +70,13 @@
 # In short: this module answers "how do I get systemd-repart to produce a
 # bootable image at all", not "how do I ship that image to provider X". The
 # per-provider glue is the consumer's job.
+#
+# OWNERSHIP STATUS: the direct ESP/systemd-boot construction below predates
+# nixboot's extracted boot-artifact contract. It is still the implementation
+# this option evaluates today. The target boundary is for nixvps to describe
+# the constrained provider guest and disk payload, nixboot to own the primary
+# boot artifact, and nixdeploy to own upload, registration and reimage. This
+# note does not claim that source migration is already complete.
 # ============================================================================
 
 { config, lib, pkgs, modulesPath, ... }:

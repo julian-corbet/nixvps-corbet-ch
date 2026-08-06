@@ -2,9 +2,18 @@
 
 **NixOS on sub-1GB VPSes, down to a 256MB floor.**
 
-Receiver-side NixOS modules for tiny VMs: conservative base profiles, signed
-delivery mechanisms, and prebuilt image-booting. The producer side (build,
-sign, publish) is deliberately out of scope — bring your own CI.
+NixOS guest policy for tiny VMs: conservative runtime profiles,
+provider-facing guest requirements, and lifelines for machines with very
+little RAM. Boot policy belongs to
+[nixboot](https://github.com/julian-corbet/nixboot-corbet-ch), and every
+delivery path belongs to
+[nixdeploy](https://github.com/julian-corbet/nixdeploy-corbet-ch).
+
+This repository still contains its earlier `pull-update`, `deploy-target`,
+and `image-bake` implementations. They are deprecated ownership overlaps to
+remove as their consumers move to nixdeploy and nixboot. The current-to-target
+split is recorded explicitly below rather than describing a source migration
+that has not happened yet as complete.
 
 ## The pitch
 
@@ -18,7 +27,7 @@ centralized push deployments can't reach behind NAT/firewalls anyway.
 receiver side only — configure a node to pull and trust; the producer side
 (binary cache, signing, CI/publishing) is intentionally yours to bring.
 
-## The six receiver-side modules
+## The six current modules
 
 - **`tiny-vm.nix`** — a conservative baseline profile for the ~1 vCPU / ~1 GB
   RAM class: btrfs mount tuning, bounded journald, clamped `nix-daemon` (build
@@ -27,16 +36,17 @@ receiver side only — configure a node to pull and trust; the producer side
 - **`nano.nix`** — an even tighter profile for the 256MB–512MB absolute floor:
   serial builds only, aggressive journal and systemd limits, minimal units,
   constant-memory monitoring. Designed for the edge of viability.
-- **`pull-update.nix`** — autonomous, reboot-less, pull-based self-update for
+- **`pull-update.nix`** — the earlier autonomous, reboot-less, pull-based self-update for
   unreachable nodes. On a timer, the node fetches a signed closure pointer,
   verifies it, switches live, runs a local health check, and rolls back on
   failure. No reboot anywhere in the cycle.
-- **`deploy-target.nix`** — the passive-receiver counterpart. Configures a node
+- **`deploy-target.nix`** — the earlier passive-receiver counterpart. Configures a node
   to trust a signed binary cache (`substituters` + `trusted-public-keys`, with
   `require-sigs` enforced) and to accept inbound deploys via SSH. No timers, no
   polling, no health checks — just trust setup. Use alone for push-deployment,
   or with `pull-update` for hybrid (push + pull) nodes.
-- **`image-bake.nix`** — bake a bootable disk image instead of install-on-first-boot.
+- **`image-bake.nix`** — the current generic repart image implementation. It bakes a
+  bootable disk image instead of install-on-first-boot.
   Boot from a pre-built, signed image directly, skipping the build step entirely
   on the target VM. Supports common image formats for cloud providers.
 - **`lifeline.nix`** — four independently toggleable "never lose a headless
@@ -47,12 +57,26 @@ receiver side only — configure a node to pull and trust; the producer side
   and `heartbeat` (a dead-man's-switch ping to an external monitoring URL,
   over normal public egress, never the overlay). Enable any subset.
 
-### Deliberately out of scope
+### Ownership boundary
 
-**The producer side.** Building, signing, and publishing closures or images
-is outside this project. Bring your own CI, binary cache, and signing setup.
-See [BUILD-CONTRACT.md](BUILD-CONTRACT.md) for the interface contract. `nixvps`
-owns the receiver: configure a node to pull and trust.
+`nixvps` owns facts and policy that are true because the machine is a
+constrained VPS guest: RAM-safe daemon settings, small-disk defaults,
+provider guest requirements and serial/lifeline behavior. It does not own:
+
+- the bootloader, ESP, UKIs, boot generations or boot verification — those
+  belong to `nixboot`; the current direct ESP construction in
+  `image-bake.nix` is an implemented overlap awaiting migration;
+- build/update triggers, publication, signed desired targets, receiver
+  scheduling, substitution, activation, rollback, health outcomes,
+  rescue-artifact materialisation, image upload/registration or reimage —
+  those all belong to `nixdeploy`; and
+- concrete cache URLs and keys, host names, provider image identities,
+  health endpoints or resource ceilings — those are private consumer data.
+
+The existing `pull-update.nix` and delivery parts of `deploy-target.nix`
+predate this separation and remain until their consumers migrate. See
+[BUILD-CONTRACT.md](BUILD-CONTRACT.md) for their currently implemented
+contract; it is not the target design.
 
 **Memory-pressure tuning.** Deep `zram`/`zswap`/OOM-killer engineering belongs
 to the sibling [nixram](https://github.com/julian-corbet/nixram-corbet-ch)
@@ -61,7 +85,7 @@ system-shape and delivery problems.
 
 ## Status
 
-**Pre-alpha, modules real.** Six modules exist and work:
+**Pre-alpha, modules real; ownership migration incomplete.** Six modules exist and work:
 
 - `nixosModules.tiny-vm` (`modules/tiny-vm.nix`)
 - `nixosModules.nano` (`modules/nano.nix`)
@@ -70,15 +94,11 @@ system-shape and delivery problems.
 - `nixosModules.image-bake` (`modules/image-bake.nix`)
 - `nixosModules.lifeline` (`modules/lifeline.nix`)
 
-The first five were developed and used in production, then generalized to
-carry no site-specific defaults. `lifeline.nix` is newer: written directly
-against this generalized, no-site-specifics design from the start, and
-verified by NixOS module evaluation (`nix eval`, plus a toy `nixosSystem`
-exercising all four mechanisms together) rather than by prior production
-runtime. All six are functional but still lightly documented and not yet
-used outside their original context (the first five) or run on a real VM
-(`lifeline.nix`). Example configurations and full documentation are in
-progress. Nothing advertised here is invented or missing.
+All six are functional, but the delivery and boot-image surfaces still
+reflect the repository's earlier, broader scope. `lifeline.nix` has
+evaluation coverage but has not been exercised on a real VM. The boundary
+above is the target; source removal and consumer migration have not happened
+merely because the documentation now names it.
 
 ## Usage
 
@@ -267,14 +287,9 @@ conflict.
             # parallel HTTP connections and the per-download in-RAM buffer so a
             # large closure's substitution can't OOM the box on download
             # parallelism alone. (default: null / nix's own default, both)
-            httpConnections = 4;
-            downloadBufferSize = 64 * 1024 * 1024; # 64 MiB
-
-            # Pure data for an EXTERNAL deploy controller to read (this module
-            # never reads it itself): the largest in-place download delta this
-            # node can safely activate before the controller should route to a
-            # prebuilt image instead. (default: null / unbounded)
-            maxInplaceDeltaBytes = 500 * 1024 * 1024; # 500 MiB
+            # Resource limits and an in-place delta ceiling are available,
+            # but deliberately omitted here: they are properties of the real
+            # receiving host and belong in its private configuration.
           };
         }
       ];
@@ -285,9 +300,11 @@ conflict.
 
 ### image-bake: Boot from prebuilt image instead of install-on-first-boot
 
-Skip the build step on the target. Instead, bake a bootable disk image (qcow2,
-raw, etc.), sign it with your producer-side pipeline, and boot the VM from that
-image directly. This module configures the node-side image verification.
+Skip the build step on the target. Instead, bake a raw bootable disk image and
+boot the VM from that image directly. The current module constructs the ESP
+and root image; it does not upload, register, sign, select, or verify a
+provider image. Those are delivery responsibilities, and the target ownership
+for the boot artifact itself is nixboot.
 
 ```nix
 {

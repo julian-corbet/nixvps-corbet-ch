@@ -4,6 +4,12 @@
 # node-side half of a pull delivery model: instead of a controller reaching
 # in, the node reaches OUT on a timer.
 #
+# OWNERSHIP STATUS: this is the repository's earlier delivery implementation
+# and remains functional. Nixdeploy is now the sole delivery specialist for
+# build/update triggers, signed targets, receiver scheduling, activation,
+# health and rollback. Nixvps owns only the constrained guest policy. This
+# note records the overlap without pretending its consumers have migrated.
+#
 # Every tick the node:
 #   1. reads a DNS TXT pointer (published by your build/deploy pipeline after
 #      each build) naming the target `system.build.toplevel` store path built
