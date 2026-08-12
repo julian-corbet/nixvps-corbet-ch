@@ -405,6 +405,16 @@ any subset — none of them depend on each other.
             probeTargets = [ "100.64.0.1" ];
             # managementCheck = "curl -fsS http://127.0.0.1:8080/status | grep -q connected";
 
+            # Optional circuit breaker for broad recovery actions. After two
+            # tier-1 agent restarts, a successful NON-overlay workload check
+            # suppresses networkd restarts and reboot while the overlay's own
+            # control plane is unavailable. Leave null for the original ladder.
+            # hostHealthCheck = "curl -fsS --max-time 10 https://my-public-service.example/health";
+
+            # Both custom checks are also bounded by the module itself.
+            # (default: 10 seconds per check)
+            checkTimeoutSeconds = 10;
+
             # REQUIRED: the overlay/mesh agent's systemd unit, restarted at
             # tier 1 (e.g. netbird.service, tailscaled.service, wg-quick@wt0.service).
             agentUnit = "netbird.service";

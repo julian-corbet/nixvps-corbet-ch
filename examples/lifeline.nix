@@ -39,6 +39,13 @@
             # real status check.
             managementCheck = "curl -fsS http://127.0.0.1:8080/status | grep -q connected";
 
+            # Optional: prove the host's public/non-overlay workload is still
+            # healthy. After two agent restarts, success suppresses the broad
+            # networkd/reboot tiers so an external overlay-control-plane outage
+            # cannot turn into an outage of this host too.
+            hostHealthCheck = "curl -fsS --max-time 10 https://service.example.com/health";
+            checkTimeoutSeconds = 10; # default; bounds both custom checks
+
             # REQUIRED: the overlay/mesh agent's systemd unit, restarted at
             # tier 1. e.g. netbird.service, tailscaled.service,
             # wg-quick@wt0.service — whatever your overlay tool actually is.

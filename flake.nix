@@ -32,15 +32,25 @@
 
       lib = { };
 
-      checks = forAllSystems (system: {
-        pull-update-generation-guard = import ./checks/pull-update-generation-guard.nix {
-          pkgs = nixpkgs.legacyPackages.${system};
-        };
-        pull-update-module-eval = import ./checks/pull-update-module-eval.nix {
-          pkgs = nixpkgs.legacyPackages.${system};
-          inherit nixpkgs system;
-        };
-      });
+      checks = forAllSystems (system:
+        {
+          pull-update-generation-guard = import ./checks/pull-update-generation-guard.nix {
+            pkgs = nixpkgs.legacyPackages.${system};
+          };
+          pull-update-module-eval = import ./checks/pull-update-module-eval.nix {
+            pkgs = nixpkgs.legacyPackages.${system};
+            inherit nixpkgs system;
+          };
+          lifeline-host-health = import ./checks/lifeline-host-health.nix {
+            pkgs = nixpkgs.legacyPackages.${system};
+            inherit nixpkgs system;
+          };
+        }
+        // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
+          lifeline-host-health-vm = import ./checks/lifeline-host-health-vm.nix {
+            pkgs = nixpkgs.legacyPackages.${system};
+          };
+        });
 
       formatter = forAllSystems (system: nixpkgs.legacyPackages.${system}.nixpkgs-fmt);
     };

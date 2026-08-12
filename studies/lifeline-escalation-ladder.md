@@ -82,6 +82,13 @@ change later.
   and does nothing for others (a provider-side network outage, a fully
   dead NIC). Tier 3 exists precisely because the first two tiers are not
   guaranteed to work.
+- **An overlay outage is not automatically a host outage.** A provider or
+  self-hosted control plane can fail while the workload and ordinary public
+  egress remain healthy. `watchdog.hostHealthCheck` is the optional circuit
+  breaker for that topology: tier 1 still gets two narrow agent restarts, but
+  a successful non-overlay workload check suppresses networkd restarts and
+  reboot until the overlay recovers. The check must not depend on the overlay
+  or its control plane, or it merely restates the failing signal.
 - **`ss -4`/`-6` is an imperfect dual-stack check.** A single dual-stack
   `[::]:22` listener commonly still serves IPv4 clients via v4-mapped
   addresses, so the `sshLifeline` boot check reporting "no IPv4 listener"

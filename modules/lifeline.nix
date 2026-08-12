@@ -64,8 +64,10 @@ let
     IFACE=${lib.escapeShellArg wd.iface}
     TARGETS=${lib.escapeShellArg (lib.concatStringsSep " " wd.probeTargets)}
     MGMT_CHECK=${lib.escapeShellArg (if wd.managementCheck == null then "" else wd.managementCheck)}
+    HOST_HEALTH_CHECK=${lib.escapeShellArg (if wd.hostHealthCheck == null then "" else wd.hostHealthCheck)}
     AGENT_UNIT=${lib.escapeShellArg wd.agentUnit}
     GRACE_SEC=$(( ${toString wd.graceMinutes} * 60 ))
+    CHECK_TIMEOUT_SEC=${toString wd.checkTimeoutSeconds}
     ALLOW_REBOOT=${if wd.allowSelfReboot then "1" else "0"}
     REBOOT_AFTER_SEC=$(( ${toString wd.rebootAfterHours} * 3600 ))
 
@@ -98,7 +100,10 @@ let
 
     mgmt_ok=0
     if [ -n "$MGMT_CHECK" ]; then
-      if "${pkgs.runtimeShell}" -c "$MGMT_CHECK" >/dev/null 2>&1; then mgmt_ok=1; fi
+      if timeout --kill-after=1 "$CHECK_TIMEOUT_SEC" \
+        "${pkgs.runtimeShell}" -c "$MGMT_CHECK" >/dev/null 2>&1; then
+        mgmt_ok=1
+      fi
     fi
 
     if [ "$probe_ok" = 1 ] || [ "$mgmt_ok" = 1 ]; then
@@ -127,10 +132,11 @@ let
       exit 0
     fi
 
-    # -- 3. escalate. Tier 3 (reboot) is judged purely on total elapsed
+    # -- 3. escalate. Tier 3 (reboot) is judged on total elapsed
     # isolation time, independent of how many tier-1/tier-2 attempts already
-    # ran -- a box isolated this long gets rebooted regardless of what the
-    # lower tiers already tried.
+    # ran, unless hostHealthCheck proves that the host's non-overlay workload
+    # and underlay are still healthy. An unavailable overlay control plane is
+    # not evidence that restarting the whole host can help.
     #
     # ⚠ BUT AT MOST ONCE PER BACKOFF WINDOW. The isolation clock lives on persistent disk and
     # is only cleared by recovery, so once `elapsed` passes the threshold it STAYS past it --
@@ -146,9 +152,28 @@ let
     # A reboot that did not restore connectivity is evidence that rebooting is not the answer.
     # Retry on a long backoff (in case the cause was genuinely transient and slow to clear),
     # never on the timer interval.
+    tier1_count=$(cat "$TIER1_COUNT_FILE" 2>/dev/null || echo 0)
+
+    # A configured host-health check is a circuit breaker around the broad
+    # actions (networkd restart and reboot), not around the narrow tier-1
+    # agent restart. Always give the agent its two normal recovery attempts
+    # first. After that, a healthy non-overlay plane proves this is an
+    # overlay-only incident and broad escalation would turn one dependency's
+    # outage into an outage of the host itself.
+    broad_escalation_allowed=1
+    if [ -n "$HOST_HEALTH_CHECK" ]; then
+      if [ "$tier1_count" -lt 2 ]; then
+        broad_escalation_allowed=0
+      elif timeout --kill-after=1 "$CHECK_TIMEOUT_SEC" \
+        "${pkgs.runtimeShell}" -c "$HOST_HEALTH_CHECK" >/dev/null 2>&1; then
+        log "overlay remains isolated after $tier1_count tier-1 attempts, but hostHealthCheck passes -- suppressing systemd-networkd restart and reboot"
+        exit 0
+      fi
+    fi
+
     TIER3_LAST_FILE="$STATE_DIR/watchdog-tier3-last"
     TIER3_BACKOFF_SEC=$(( REBOOT_AFTER_SEC ))
-    if [ "$ALLOW_REBOOT" = 1 ] && [ "$elapsed" -ge "$REBOOT_AFTER_SEC" ]; then
+    if [ "$broad_escalation_allowed" = 1 ] && [ "$ALLOW_REBOOT" = 1 ] && [ "$elapsed" -ge "$REBOOT_AFTER_SEC" ]; then
       tier3_last=$(cat "$TIER3_LAST_FILE" 2>/dev/null || echo 0)
       since_tier3=$(( now - tier3_last ))
       if [ "$tier3_last" -gt 0 ] && [ "$since_tier3" -lt "$TIER3_BACKOFF_SEC" ]; then
@@ -162,10 +187,10 @@ let
       fi
     fi
 
-    tier1_count=$(cat "$TIER1_COUNT_FILE" 2>/dev/null || echo 0)
-
     if [ "$tier1_count" -ge 2 ]; then
-      if systemctl list-unit-files systemd-networkd.service 2>/dev/null | grep -q '^systemd-networkd\.service'; then
+      if [ "$broad_escalation_allowed" != 1 ]; then
+        log "hostHealthCheck is configured; waiting for two tier-1 agent restarts before any broad escalation"
+      elif systemctl list-unit-files systemd-networkd.service 2>/dev/null | grep -q '^systemd-networkd\.service'; then
         loud "TIER 2: still isolated after ''${tier1_count} tier-1 attempts -- restarting systemd-networkd"
         systemctl restart systemd-networkd.service || loud "TIER 2: systemd-networkd restart FAILED"
       else
@@ -269,6 +294,42 @@ in
         '';
       };
 
+      hostHealthCheck = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "curl -fsS --max-time 5 -H 'Metadata-Flavor: Google' http://169.254.169.254/computeMetadata/v1/instance/id >/dev/null && systemctl is-active --quiet my-workload.service";
+        description = ''
+          Optional non-overlay health command, run via
+          `${pkgs.runtimeShell} -c` after tier 1 has already restarted the
+          overlay agent twice. Exit 0 only when the host's underlay and
+          survival workload are healthy enough that restarting networkd or
+          rebooting the VM would be harmful rather than corrective.
+
+          While this command succeeds, tiers 2 and 3 are suppressed but the
+          isolation state remains armed and the ordinary overlay probes keep
+          running. When the overlay recovers, the state is cleared normally.
+          When this command fails, the existing networkd/reboot ladder is
+          allowed to continue. Leave null to preserve the original ladder.
+
+          This must be independent of the overlay and its control plane. A
+          second overlay endpoint is not a host-health check: a control-plane
+          outage would make both fail and would still cause the watchdog to
+          reboot a healthy workload host for an external dependency failure.
+        '';
+      };
+
+      checkTimeoutSeconds = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 10;
+        description = ''
+          Hard timeout applied separately to `managementCheck` and
+          `hostHealthCheck`, including a one-second TERM-to-KILL grace.
+          A watchdog whose own status command hangs would otherwise retain
+          its flock and block every later timer tick behind one active
+          oneshot.
+        '';
+      };
+
       agentUnit = lib.mkOption {
         type = lib.types.str;
         example = "netbird.service";
@@ -316,7 +377,8 @@ in
           after which tier 3 fires, if `allowSelfReboot` is true.
           Independent of how many tier-1/tier-2 attempts already happened:
           a box isolated this long gets rebooted regardless of what the
-          lower tiers already tried.
+          lower tiers already tried, unless `hostHealthCheck` proves the
+          non-overlay host is healthy and suppresses broad escalation.
         '';
       };
     };
