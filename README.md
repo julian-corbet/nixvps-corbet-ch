@@ -184,6 +184,14 @@ check fails, the node rolls back automatically — a stand-in for a push
 controller's remote rollback, which only works when the controller can still
 reach the node.
 
+A pointer naming a store path already known as an older system-profile
+generation is rejected before activation. This prevents an old but correctly
+signed DNS value from downgrading a healthy node and restarting its workload.
+An intentional rollback must temporarily set
+`allowKnownGenerationRollback = true`; previously unseen targets still use the
+normal cache-signature and health gates because a store path has no inherent
+sequence number.
+
 The receiver activates as root, but it keeps its own state in
 `/var/lib/pull-update` and Nix's binary-cache metadata in
 `/var/cache/pull-update`; timer runs do not write Nix state into `/root`.
@@ -219,6 +227,10 @@ pushes from a controller when it is reachable.
             # Replace with the units your workload depends on.
             # (default: ["sshd"] — only ensures the VM is reachable)
             healthUnits = [ "sshd" "my-app" ];
+
+            # Deliberate rollback escape hatch. Leave false for normal pulls.
+            # (default: false)
+            allowKnownGenerationRollback = false;
 
             # Delay before the first pull after boot.
             # (default: "10min")

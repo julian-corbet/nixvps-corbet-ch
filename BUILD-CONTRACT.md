@@ -81,6 +81,8 @@ When the node's update trigger fires (a timer tick for `pull-update`, or an SSH
 session for `deploy-target`):
 
 1. It reads or receives the pointer to `/nix/store/...-nixos-system-myhost-...`.
+   `pull-update` rejects a path already recorded as an older system-profile
+   generation unless its deliberate-rollback escape hatch is enabled.
 2. It asks the cache "do you have this, and is it signed by a key I trust?"
 3. The cache proves it (or the node already has it locally from a prior pull).
 4. The node runs `nix copy --from <cache> <path>` (download only, verified).

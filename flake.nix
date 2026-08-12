@@ -32,6 +32,16 @@
 
       lib = { };
 
+      checks = forAllSystems (system: {
+        pull-update-generation-guard = import ./checks/pull-update-generation-guard.nix {
+          pkgs = nixpkgs.legacyPackages.${system};
+        };
+        pull-update-module-eval = import ./checks/pull-update-module-eval.nix {
+          pkgs = nixpkgs.legacyPackages.${system};
+          inherit nixpkgs system;
+        };
+      });
+
       formatter = forAllSystems (system: nixpkgs.legacyPackages.${system}.nixpkgs-fmt);
     };
 }

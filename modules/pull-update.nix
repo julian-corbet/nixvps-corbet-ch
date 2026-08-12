@@ -42,6 +42,7 @@
 
 let
   cfg = config.nixvps.pullUpdate;
+  generationGuard = builtins.readFile ../lib/pull-update-generation-guard.sh;
 
   runtimeBin = lib.makeBinPath [
     pkgs.dnsutils # dig
@@ -66,7 +67,10 @@ let
     HOST=${lib.escapeShellArg cfg.host}
     HEALTH_URL=${lib.escapeShellArg (if cfg.healthUrl == null then "" else cfg.healthUrl)}
     UNITS=${lib.escapeShellArg (lib.concatStringsSep " " cfg.healthUnits)}
+    ALLOW_KNOWN_GENERATION_ROLLBACK=${if cfg.allowKnownGenerationRollback then "1" else "0"}
     PROFILE=/nix/var/nix/profiles/system
+
+    ${generationGuard}
 
     log()  { echo "pull-update: $*"; }
     # skip: nothing to apply this tick — box stays exactly as-is, exit clean.
@@ -124,6 +128,16 @@ let
     # ── 3. differs from the running system? ──────────────────────────────────
     CURRENT=$(readlink -f /run/current-system)
     [ "$TARGET" != "$CURRENT" ] || { log "already on target ($TARGET)"; exit 0; }
+
+    # A stale but correctly signed pointer is still dangerous. If its path is
+    # already recorded as an older system-profile generation, it is not an
+    # update: it is a rollback request. Refuse it by default before downloading
+    # or restarting anything. A previously unseen path cannot be ordered from a
+    # path alone and proceeds to the normal signature + canary gates.
+    if [ "$ALLOW_KNOWN_GENERATION_ROLLBACK" != 1 ] && \
+       is_known_generation_rollback "$CURRENT" "$TARGET"; then
+      skip "target is known system generation $KNOWN_TARGET_GENERATION, older than running generation $KNOWN_CURRENT_GENERATION — refusing stale-pointer rollback"
+    fi
 
     # ── 4. substitute the signed closure (DOWNLOAD ONLY, sig-checked) ─────────
     # If the target is ALREADY valid in the local store (a prior tick pulled it, or
@@ -230,6 +244,19 @@ in
         Replace this with the units that actually matter for your workload —
         the default is only a minimal generic placeholder that keeps SSH
         reachable; it does not validate your application.
+      '';
+    };
+
+    allowKnownGenerationRollback = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Permit a DNS pointer to activate a store path already present as an
+        older system-profile generation. False by default: a stale but validly
+        signed pointer must not silently downgrade a healthy node and restart
+        its workload. Set true only for a deliberate rollback publication;
+        previously unseen targets still pass through the normal signature and
+        health gates because a bare store path carries no total ordering.
       '';
     };
 
