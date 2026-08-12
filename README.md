@@ -48,7 +48,9 @@ receiver side only — configure a node to pull and trust; the producer side
 - **`image-bake.nix`** — the current generic repart image implementation. It bakes a
   bootable disk image instead of install-on-first-boot.
   Boot from a pre-built, signed image directly, skipping the build step entirely
-  on the target VM. Supports common image formats for cloud providers.
+  on the target VM. The image carries Nix's own state as well as its store —
+  the store database and generation 1 of the `system` profile — so the booted
+  node can be deployed to incrementally, rolled back, and garbage-collected.
 - **`lifeline.nix`** — four independently toggleable "never lose a headless
   tiny VM" mechanisms: `watchdog` (detect overlay/agent isolation and climb
   a restart-then-reboot escalation ladder), `sshLifeline` (keep sshd itself
@@ -318,13 +320,21 @@ for the boot artifact itself is nixboot.
           nixvps.imageBake = {
             enable = true;
 
-            # Optional: image format (qcow2, raw, etc.)
-            # (default: "raw")
-            format = "qcow2";
+            # Optional: "raw" (default) or "raw.zst" when the upload path is
+            # the bottleneck. Both are raw disk images; the second is only
+            # transport-compressed.
+            format = "raw.zst";
 
-            # Optional: include these extra packages in the image.
-            # (default: [])
-            extraPackages = [ "git" "tmux" ];
+            # Optional: pin the whole image size instead of letting
+            # systemd-repart size it to its partitions. Needed when the image
+            # is dd'd byte-for-byte onto a disk of a known size.
+            # imageSize = "10G";
+
+            # Optional floors: ESP size (default "512M") and the root
+            # partition's minimum size (default "2G"). The root filesystem
+            # grows to fill the real disk on first boot regardless.
+            # espSize = "512M";
+            # rootSize = "1G";
           };
         }
       ];
@@ -332,6 +342,29 @@ for the boot artifact itself is nixboot.
   };
 }
 ```
+
+**What the image contains besides the closure.** `systemd-repart` copies store
+paths in as plain files and knows nothing about Nix. An image built that way
+boots fine and is then permanently undeployable: with no store database, the
+node's answer to "what do you already have" is *nothing*, so every incremental
+deploy measures as the whole closure; `--rollback` has no previous generation
+to return to; and `nix-collect-garbage` classes the running system as garbage.
+So this module also bakes in, at build time:
+
+- `/nix/var/nix/db` — the store database, written by `nix-store --load-db` from
+  the same closure the partition carries, with `registrationTime` flattened to
+  `SOURCE_DATE_EPOCH` so two bakes of one closure stay byte-identical;
+- `/nix/var/nix/profiles/system` — generation 1, in the shape `nix-env --set`
+  leaves behind, so generations and rollback work from the first boot and the
+  closure is a GC root.
+
+It is built into the image rather than registered by a first-boot unit (which
+is what upstream's ISO and netboot images have to do, their store being on
+read-only media). A writable root filesystem assembled offline can simply
+*contain* the database, so the image is correct before it is ever uploaded, or
+it fails to build. A `nixvps-store-registration.service` proves the invariant on
+every boot and fails loudly if it does not hold; it never repairs it, because a
+self-repairing node would let a broken image keep shipping.
 
 ### lifeline: never lose a headless tiny VM
 
